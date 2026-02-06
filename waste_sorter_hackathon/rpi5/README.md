@@ -6,6 +6,7 @@ It uses:
 - `onnxruntime` for inference (CPU)
 - `opencv-python` for webcam/video I/O
 - temporal smoothing + threshold routing logic (same behavior as training project)
+- class names auto-loaded from ONNX metadata (with YAML fallback)
 
 ## Folder Structure
 ```text
@@ -140,6 +141,14 @@ python scripts/run_realtime.py --model models/waste_sorter.onnx --camera_backend
 python scripts/run_realtime.py --model models/waste_sorter.onnx --camera_backend picamera2 --threshold 0.65 --window 7
 ```
 
+- If ONNX metadata is missing names, provide a names YAML:
+```bash
+python scripts/run_realtime.py \
+  --model models/waste_sorter.onnx \
+  --class_names_yaml ../configs/data.yaml \
+  --camera_backend picamera2
+```
+
 - Lower CPU load (recommended for first run stability):
 ```bash
 python scripts/run_realtime.py \
@@ -214,6 +223,18 @@ Lower stream load if needed:
 - reduce `--width/--height`
 - reduce `--camera_fps`
 - reduce `--http_quality` (for example `60`)
+
+## No Detections Debug
+If runtime shows `detections=0` continuously:
+1. Lower threshold first:
+```bash
+python scripts/run_realtime.py --model models/waste_sorter.onnx --camera_backend picamera2 --conf 0.10 --iou 0.45 --no_display
+```
+2. Verify class names detected at startup (`Classes (...)` and `Runtime classes:` log lines).
+3. Ensure object is large and centered in frame.
+4. Confirm ONNX model matches your current training stage:
+   - 1-class prototype model detects only one class
+   - 8-class model required for full sorter behavior
 
 Check for throttling/undervoltage after reboot:
 ```bash

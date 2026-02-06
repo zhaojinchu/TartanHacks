@@ -21,7 +21,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.decision import TemporalDecisionEngine
-from src.io_utils import CLASS_NAMES, load_decision_config
+from src.io_utils import load_decision_config, resolve_class_names
 from src.onnx_detector import ONNXWasteDetector
 
 
@@ -252,6 +252,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("configs/decision.yaml"),
         help="Path to decision YAML",
+    )
+    parser.add_argument(
+        "--class_names_yaml",
+        type=Path,
+        default=None,
+        help="Optional YAML with `names` list/dict (fallback if ONNX metadata missing).",
     )
     parser.add_argument("--camera_index", type=int, default=0)
     parser.add_argument(
@@ -525,13 +531,17 @@ def get_health_snapshot() -> dict[str, object]:
 def draw_overlay(
     frame,
     detections,
+    class_names: list[str],
     decision: dict[str, object],
     fps_ema: float,
 ) -> None:
     """Draw detections, routing decision, and FPS on frame."""
     for det in detections:
         x1, y1, x2, y2 = det.box_xyxy
-        class_name = CLASS_NAMES[det.class_id]
+        if 0 <= det.class_id < len(class_names):
+            class_name = class_names[det.class_id]
+        else:
+            class_name = str(det.class_id)
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 220, 0), 2)
         cv2.putText(
@@ -575,25 +585,36 @@ def main() -> None:
     if args.http_stream and args.https_stream:
         raise ValueError("Use only one of --http_stream or --https_stream")
 
-    class_to_bin, cfg_threshold, cfg_window = load_decision_config(args.decision_config)
-    threshold = args.threshold if args.threshold is not None else cfg_threshold
-    window_size = args.window if args.window is not None else cfg_window
+    fallback_class_names = resolve_class_names(
+        class_names=None,
+        class_names_yaml=args.class_names_yaml,
+    )
 
     detector = ONNXWasteDetector(
         model_path=args.model,
-        class_names=CLASS_NAMES,
+        class_names=fallback_class_names,
         imgsz=args.imgsz,
         conf_threshold=args.conf,
         iou_threshold=args.iou,
         intra_op_threads=args.ort_intra_threads,
         inter_op_threads=args.ort_inter_threads,
     )
+    runtime_class_names = detector.class_names
+
+    class_to_bin, cfg_threshold, cfg_window = load_decision_config(
+        args.decision_config,
+        class_names=runtime_class_names,
+    )
+    threshold = args.threshold if args.threshold is not None else cfg_threshold
+    window_size = args.window if args.window is not None else cfg_window
+
+    print(f"Runtime classes: {runtime_class_names}")
 
     decision_engine = TemporalDecisionEngine(
         class_to_bin=class_to_bin,
         threshold=threshold,
         window_size=window_size,
-        class_names=CLASS_NAMES,
+        class_names=runtime_class_names,
     )
 
     camera, backend_name = open_camera_source(args)
@@ -680,7 +701,7 @@ def main() -> None:
             fps = 1.0 / dt
             fps_ema = fps if fps_ema == 0.0 else ((1 - fps_alpha) * fps_ema + fps_alpha * fps)
 
-            draw_overlay(frame, detections, last_decision, fps_ema)
+            draw_overlay(frame, detections, runtime_class_names, last_decision, fps_ema)
 
             if stream_server is not None:
                 enc_t0 = time.perf_counter()

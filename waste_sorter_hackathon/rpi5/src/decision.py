@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import deque
 from typing import Sequence
 
-from src.io_utils import CLASS_NAMES
+from src.io_utils import DEFAULT_CLASS_NAMES
 
 Detection = tuple[int, float]
 DecisionResult = dict[str, object]
@@ -26,7 +26,7 @@ class TemporalDecisionEngine:
         if not (0.0 <= threshold <= 1.0):
             raise ValueError("threshold must be in [0,1]")
 
-        self.class_names = class_names or CLASS_NAMES
+        self.class_names = class_names or DEFAULT_CLASS_NAMES
         self.class_to_bin = class_to_bin
         self.threshold = threshold
         self.history: deque[list[float]] = deque(maxlen=window_size)

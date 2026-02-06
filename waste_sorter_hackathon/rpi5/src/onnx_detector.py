@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import ast
+import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
@@ -25,7 +28,7 @@ class ONNXWasteDetector:
     def __init__(
         self,
         model_path: str | Path,
-        class_names: list[str],
+        class_names: list[str] | None = None,
         imgsz: int = 512,
         conf_threshold: float = 0.25,
         iou_threshold: float = 0.45,
@@ -36,7 +39,6 @@ class ONNXWasteDetector:
         if not self.model_path.exists():
             raise FileNotFoundError(f"ONNX model not found: {self.model_path}")
 
-        self.class_names = class_names
         self.conf_threshold = float(conf_threshold)
         self.iou_threshold = float(iou_threshold)
 
@@ -64,6 +66,9 @@ class ONNXWasteDetector:
             sess_options=sess_options,
             providers=providers,
         )
+        metadata_names = self._load_names_from_metadata()
+        self.class_names = self._resolve_class_names(class_names, metadata_names)
+
         input_meta = self.session.get_inputs()[0]
         self.input_name = input_meta.name
 
@@ -80,6 +85,7 @@ class ONNXWasteDetector:
         print(f"Loaded ONNX: {self.model_path}")
         print(f"Providers: {self.session.get_providers()}")
         print(f"Input: name={self.input_name}, shape=({self.input_height}, {self.input_width})")
+        print(f"Classes ({len(self.class_names)}): {self.class_names}")
         print(
             "ONNX threads: "
             f"intra_op={sess_options.intra_op_num_threads} "
@@ -213,6 +219,72 @@ class ONNXWasteDetector:
 
         keep_np = np.array(keep_idx, dtype=np.int32)
         return boxes[keep_np], scores[keep_np], class_ids[keep_np]
+
+    def _load_names_from_metadata(self) -> list[str] | None:
+        """Try reading class names from ONNX metadata (Ultralytics export)."""
+        try:
+            meta = self.session.get_modelmeta().custom_metadata_map
+        except Exception:
+            return None
+
+        if not isinstance(meta, dict):
+            return None
+
+        for key in ("names", "classes", "class_names"):
+            raw = meta.get(key)
+            if raw:
+                names = self._parse_names_value(raw)
+                if names:
+                    return names
+        return None
+
+    @staticmethod
+    def _parse_names_value(raw: str) -> list[str] | None:
+        """Parse model metadata names from JSON or Python dict/list string."""
+        obj: Any | None = None
+
+        for parser in (json.loads, ast.literal_eval):
+            try:
+                obj = parser(raw)
+                break
+            except Exception:
+                continue
+
+        if obj is None:
+            return None
+
+        if isinstance(obj, list):
+            return [str(x) for x in obj]
+
+        if isinstance(obj, dict):
+            try:
+                ordered_keys = sorted(obj.keys(), key=lambda k: int(k))
+            except Exception:
+                ordered_keys = sorted(obj.keys(), key=str)
+            return [str(obj[k]) for k in ordered_keys]
+
+        return None
+
+    @staticmethod
+    def _resolve_class_names(
+        provided_names: list[str] | None, metadata_names: list[str] | None
+    ) -> list[str]:
+        """Resolve runtime class names with priority: metadata > provided."""
+        if metadata_names:
+            if provided_names and provided_names != metadata_names:
+                print(
+                    "Warning: provided class names differ from ONNX metadata. "
+                    "Using metadata names."
+                )
+            return metadata_names
+
+        if provided_names:
+            return [str(x) for x in provided_names]
+
+        raise ValueError(
+            "No class names available. Provide class names via config or export ONNX "
+            "with metadata names."
+        )
 
     def _standardize_output(self, output: np.ndarray) -> np.ndarray:
         """Convert model output into shape [N, K]."""

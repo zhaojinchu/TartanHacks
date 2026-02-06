@@ -149,7 +149,9 @@ class ONNXWasteDetector:
         if pred.size == 0:
             return []
 
-        if pred.shape[1] <= 7:
+        if pred.shape[1] == 5:
+            boxes, scores, class_ids = self._decode_single_class_raw_output(pred)
+        elif pred.shape[1] <= 7:
             boxes, scores, class_ids = self._decode_nms_output(pred)
         else:
             boxes, scores, class_ids = self._decode_raw_output(pred)
@@ -176,6 +178,41 @@ class ONNXWasteDetector:
                 )
             )
         return detections
+
+    def _decode_single_class_raw_output(
+        self, pred: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Decode raw single-class output [cx, cy, w, h, score]."""
+        if len(self.class_names) != 1:
+            raise ValueError(
+                "Model output appears to be single-class ([cx,cy,w,h,score]) but runtime "
+                f"is configured for {len(self.class_names)} classes. "
+                "Use an 8-class ONNX model or align runtime class names."
+            )
+
+        raw_boxes = pred[:, :4].astype(np.float32)
+        scores = pred[:, 4].astype(np.float32)
+        class_ids = np.zeros_like(scores, dtype=np.int32)
+
+        keep = scores >= self.conf_threshold
+        if not np.any(keep):
+            return np.empty((0, 4)), np.empty((0,)), np.empty((0,), dtype=np.int32)
+
+        raw_boxes = raw_boxes[keep]
+        scores = scores[keep]
+        class_ids = class_ids[keep]
+
+        boxes = self._xywh_to_xyxy(raw_boxes)
+        if boxes.size and np.nanmax(boxes) <= 1.5:
+            boxes[:, [0, 2]] *= float(self.input_width)
+            boxes[:, [1, 3]] *= float(self.input_height)
+
+        keep_idx = self._nms(boxes, scores, self.iou_threshold)
+        if not keep_idx:
+            return np.empty((0, 4)), np.empty((0,)), np.empty((0,), dtype=np.int32)
+
+        keep_np = np.array(keep_idx, dtype=np.int32)
+        return boxes[keep_np], scores[keep_np], class_ids[keep_np]
 
     def _standardize_output(self, output: np.ndarray) -> np.ndarray:
         """Convert model output into shape [N, K]."""

@@ -4,6 +4,13 @@ train: train/images
 val: valid/images
 test: test/images
 
-nc: 1
+nc: 8
 names:
+  - aluminum_can
+  - plastic_bottle
+  - lp_paper_cup
+  - lp_plastic_cup
   - rigid_plastic_container
+  - straw
+  - utensil
+  - napkin

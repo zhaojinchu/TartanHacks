@@ -8,6 +8,8 @@ from pathlib import Path
 import torch
 from ultralytics import YOLO
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train YOLO waste sorter model.")
@@ -37,15 +39,26 @@ def resolve_device(device_arg: str) -> str | int:
     return "cpu"
 
 
+def resolve_repo_path(path_arg: str) -> Path:
+    """Resolve path relative to repo root unless already absolute."""
+    path = Path(path_arg).expanduser()
+    if path.is_absolute():
+        return path
+    return (REPO_ROOT / path).resolve()
+
+
 def main() -> None:
     args = parse_args()
 
-    data_path = Path(args.data)
+    data_path = resolve_repo_path(args.data)
+    project_dir = resolve_repo_path(args.project)
     if not data_path.exists():
         raise FileNotFoundError(f"Data config not found: {data_path}")
 
     device = resolve_device(args.device)
     print(f"Using device: {device}")
+    print(f"Data config: {data_path}")
+    print(f"Project dir: {project_dir}")
 
     model = YOLO(args.model)
 
@@ -54,7 +67,7 @@ def main() -> None:
         imgsz=args.imgsz,
         epochs=args.epochs,
         batch=args.batch,
-        project=args.project,
+        project=str(project_dir),
         name=args.name,
         device=device,
         seed=args.seed,

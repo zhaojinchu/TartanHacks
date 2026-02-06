@@ -17,6 +17,7 @@ rpi5/
     waste_sorter.onnx      # place exported model here
   scripts/
     run_realtime.py
+    infer_image.py
   src/
     io_utils.py
     decision.py
@@ -72,6 +73,31 @@ python scripts/run_realtime.py \
 ```
 
 Press `q` to quit.
+
+## 3.5) Run single-image inference (debug)
+No manual preprocessing is needed. You can pass any dataset image directly (JPG/PNG/JPEG).
+The script applies the same letterbox + normalization preprocessing internally.
+
+Example with any labeled dataset image:
+```bash
+python scripts/infer_image.py \
+  --model models/waste_sorter.onnx \
+  --image ../dataset/train/images/<your_image>.jpg \
+  --decision_config configs/decision.yaml \
+  --conf 0.10 \
+  --iou 0.45
+```
+
+This prints detections + decision JSON and saves an annotated image next to the input as:
+- `<your_image>_pred.jpg`
+
+Optionally save JSON:
+```bash
+python scripts/infer_image.py \
+  --model models/waste_sorter.onnx \
+  --image ../dataset/train/images/<your_image>.jpg \
+  --json_out runs/infer_image_result.json
+```
 
 ## 4) View live feed in browser (HTTP stream)
 Start runtime with MJPEG stream enabled:

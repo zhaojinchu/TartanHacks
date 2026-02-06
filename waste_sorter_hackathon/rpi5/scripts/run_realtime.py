@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -217,6 +218,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--imgsz", type=int, default=512)
     parser.add_argument("--conf", type=float, default=0.25)
     parser.add_argument("--iou", type=float, default=0.45)
+    parser.add_argument(
+        "--ort_intra_threads",
+        type=int,
+        default=2,
+        help="ONNX Runtime intra-op CPU threads (0=default).",
+    )
+    parser.add_argument(
+        "--ort_inter_threads",
+        type=int,
+        default=1,
+        help="ONNX Runtime inter-op CPU threads (0=default).",
+    )
     parser.add_argument("--window", type=int, default=None, help="Override smoothing window")
     parser.add_argument(
         "--threshold",
@@ -248,6 +261,18 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=80,
         help="JPEG quality [1..100] for HTTP stream.",
+    )
+    parser.add_argument(
+        "--health_every",
+        type=int,
+        default=30,
+        help="Print runtime health stats every N frames (0 to disable).",
+    )
+    parser.add_argument(
+        "--health_log",
+        type=Path,
+        default=None,
+        help="Optional path to append health stats as JSONL.",
     )
     return parser.parse_args()
 
@@ -281,6 +306,85 @@ def open_camera_source(args: argparse.Namespace) -> tuple[Any, str]:
             "Failed to open camera with both picamera2 and OpenCV backends.\n"
             "For Raspberry Pi Camera Module 2, install picamera2 and use --camera_backend picamera2."
         ) from exc
+
+
+def read_vcgencmd(key: str) -> str | None:
+    """Read vcgencmd output if available, else return None."""
+    try:
+        result = subprocess.run(
+            ["vcgencmd", key],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=1.0,
+        )
+    except Exception:
+        return None
+    return result.stdout.strip()
+
+
+def get_temp_c() -> float | None:
+    """Read CPU temperature in Celsius."""
+    thermal_path = Path("/sys/class/thermal/thermal_zone0/temp")
+    try:
+        if thermal_path.exists():
+            raw = thermal_path.read_text(encoding="utf-8").strip()
+            return float(raw) / 1000.0
+    except Exception:
+        pass
+
+    out = read_vcgencmd("measure_temp")
+    if out and "temp=" in out:
+        try:
+            return float(out.split("temp=")[1].split("'")[0])
+        except Exception:
+            return None
+    return None
+
+
+def get_mem_available_mb() -> float | None:
+    """Read available memory from /proc/meminfo."""
+    meminfo = Path("/proc/meminfo")
+    try:
+        if not meminfo.exists():
+            return None
+        for line in meminfo.read_text(encoding="utf-8").splitlines():
+            if line.startswith("MemAvailable:"):
+                parts = line.split()
+                if len(parts) >= 2:
+                    kb = float(parts[1])
+                    return kb / 1024.0
+    except Exception:
+        return None
+    return None
+
+
+def get_uptime_s() -> float | None:
+    """Read system uptime in seconds."""
+    uptime_path = Path("/proc/uptime")
+    try:
+        if not uptime_path.exists():
+            return None
+        first = uptime_path.read_text(encoding="utf-8").split()[0]
+        return float(first)
+    except Exception:
+        return None
+
+
+def get_health_snapshot() -> dict[str, object]:
+    """Collect lightweight health metrics for debugging crashes/resets."""
+    temp_c = get_temp_c()
+    mem_mb = get_mem_available_mb()
+    throttled = read_vcgencmd("get_throttled")
+    uptime_s = get_uptime_s()
+
+    snapshot: dict[str, object] = {
+        "temp_c": round(temp_c, 2) if temp_c is not None else None,
+        "mem_available_mb": round(mem_mb, 1) if mem_mb is not None else None,
+        "throttled": throttled,
+        "uptime_s": round(uptime_s, 1) if uptime_s is not None else None,
+    }
+    return snapshot
 
 
 def draw_overlay(
@@ -331,6 +435,8 @@ def main() -> None:
     args = parse_args()
     if not (1 <= args.http_quality <= 100):
         raise ValueError("--http_quality must be in [1,100]")
+    if args.ort_intra_threads < 0 or args.ort_inter_threads < 0:
+        raise ValueError("--ort_intra_threads and --ort_inter_threads must be >= 0")
 
     class_to_bin, cfg_threshold, cfg_window = load_decision_config(args.decision_config)
     threshold = args.threshold if args.threshold is not None else cfg_threshold
@@ -342,6 +448,8 @@ def main() -> None:
         imgsz=args.imgsz,
         conf_threshold=args.conf,
         iou_threshold=args.iou,
+        intra_op_threads=args.ort_intra_threads,
+        inter_op_threads=args.ort_inter_threads,
     )
 
     decision_engine = TemporalDecisionEngine(
@@ -384,6 +492,11 @@ def main() -> None:
         )
         if not writer.isOpened():
             raise RuntimeError(f"Failed to open writer: {args.save_path}")
+
+    health_log_file = None
+    if args.health_log is not None:
+        args.health_log.parent.mkdir(parents=True, exist_ok=True)
+        health_log_file = args.health_log.open("a", encoding="utf-8")
 
     print("Running real-time inference. Press 'q' to quit.")
 
@@ -431,17 +544,41 @@ def main() -> None:
 
             frame_count += 1
             if args.print_every > 0 and frame_count % args.print_every == 0:
-                print(
+                msg = (
                     f"frame={frame_count} fps={fps_ema:.1f} "
                     f"detections={len(detections)} bin={last_decision['final_bin']} "
                     f"class={last_decision['top_class']} score={last_decision['score']:.2f}"
                 )
+                if args.health_every > 0 and frame_count % args.health_every == 0:
+                    health = get_health_snapshot()
+                    msg += (
+                        " "
+                        f"temp_c={health['temp_c']} "
+                        f"mem_avail_mb={health['mem_available_mb']} "
+                        f"throttled={health['throttled']}"
+                    )
+                    if health_log_file is not None:
+                        health_row = {
+                            "time": time.time(),
+                            "frame": frame_count,
+                            "fps": round(fps_ema, 2),
+                            "detections": len(detections),
+                            "final_bin": last_decision["final_bin"],
+                            "top_class": last_decision["top_class"],
+                            "score": round(float(last_decision["score"]), 4),
+                            "health": health,
+                        }
+                        health_log_file.write(json.dumps(health_row) + "\n")
+                        health_log_file.flush()
+                print(msg)
     except KeyboardInterrupt:
         print("Interrupted by user. Stopping...")
     finally:
         camera.release()
         if writer is not None:
             writer.release()
+        if health_log_file is not None:
+            health_log_file.close()
         if stream_server is not None:
             stream_server.stop()
         if display_enabled:

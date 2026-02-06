@@ -29,6 +29,8 @@ class ONNXWasteDetector:
         imgsz: int = 512,
         conf_threshold: float = 0.25,
         iou_threshold: float = 0.45,
+        intra_op_threads: int = 0,
+        inter_op_threads: int = 0,
     ) -> None:
         self.model_path = Path(model_path)
         if not self.model_path.exists():
@@ -48,7 +50,20 @@ class ONNXWasteDetector:
         if not providers:
             raise RuntimeError("No ONNX Runtime execution provider available")
 
-        self.session = ort.InferenceSession(str(self.model_path), providers=providers)
+        sess_options = ort.SessionOptions()
+        if intra_op_threads > 0:
+            sess_options.intra_op_num_threads = int(intra_op_threads)
+        if inter_op_threads > 0:
+            sess_options.inter_op_num_threads = int(inter_op_threads)
+
+        # Keep graph optimization enabled while allowing explicit CPU thread control.
+        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+        self.session = ort.InferenceSession(
+            str(self.model_path),
+            sess_options=sess_options,
+            providers=providers,
+        )
         input_meta = self.session.get_inputs()[0]
         self.input_name = input_meta.name
 
@@ -65,6 +80,11 @@ class ONNXWasteDetector:
         print(f"Loaded ONNX: {self.model_path}")
         print(f"Providers: {self.session.get_providers()}")
         print(f"Input: name={self.input_name}, shape=({self.input_height}, {self.input_width})")
+        print(
+            "ONNX threads: "
+            f"intra_op={sess_options.intra_op_num_threads} "
+            f"inter_op={sess_options.inter_op_num_threads}"
+        )
 
     def predict(self, frame_bgr: np.ndarray) -> list[Detection]:
         """Run detection on one BGR frame."""

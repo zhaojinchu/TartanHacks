@@ -55,7 +55,7 @@ sudo apt install -y python3-picamera2
 
 Quick camera sanity test:
 ```bash
-libcamera-hello -t 3000
+rpicam-hello -t 3000
 ```
 
 ## 3) Run real-time webcam inference
@@ -107,6 +107,19 @@ python scripts/run_realtime.py --model models/waste_sorter.onnx --camera_backend
 python scripts/run_realtime.py --model models/waste_sorter.onnx --camera_backend picamera2 --threshold 0.65 --window 7
 ```
 
+- Lower CPU load (recommended for first run stability):
+```bash
+python scripts/run_realtime.py \
+  --model models/waste_sorter.onnx \
+  --camera_backend picamera2 \
+  --width 960 --height 540 \
+  --imgsz 384 \
+  --camera_fps 15 \
+  --http_stream --http_quality 65 \
+  --ort_intra_threads 2 --ort_inter_threads 1 \
+  --no_display
+```
+
 ## Decision Output Behavior
 Per frame, detections are smoothed over a rolling window.
 
@@ -132,6 +145,37 @@ Otherwise top class maps to bin (`recycle`, `compost`, `landfill`) via `configs/
 - Increase `--conf` (for example `0.35`) if too many noisy detections appear.
 - For Camera Module 2, use `--camera_backend picamera2` (recommended).
 - HTTP stream adds JPEG encoding overhead; lower resolution first if FPS drops.
+
+## Crash / Red LED Debug (Important)
+If Pi hard-resets or appears to crash during inference, most common causes are:
+- power instability / undervoltage
+- thermal stress
+- aggressive CPU load (model + JPEG stream + high camera resolution)
+
+Run with health telemetry enabled:
+```bash
+python scripts/run_realtime.py \
+  --model models/waste_sorter.onnx \
+  --camera_backend picamera2 \
+  --no_display \
+  --width 960 --height 540 \
+  --imgsz 384 \
+  --camera_fps 15 \
+  --ort_intra_threads 2 --ort_inter_threads 1 \
+  --health_every 30 \
+  --health_log runs/health.jsonl
+```
+
+Check for throttling/undervoltage after reboot:
+```bash
+vcgencmd get_throttled
+journalctl -b -1 -e | tail -n 200
+```
+
+Hardware checks:
+- Use official Raspberry Pi 5 27W USB-C PSU (or known-good 5V/5A PD supply).
+- Avoid weak USB power banks/cables.
+- Add cooling (fan/heatsink) for sustained inference workloads.
 
 ## Campus Wi-Fi Note (CMU-Secure / WPA2-Enterprise)
 It may work directly at `http://<PI_IP>:8080/` if client-to-client traffic is allowed on your network segment.

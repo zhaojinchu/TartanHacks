@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['rigid_plastic_container']
+
+roboflow:
+  workspace: test-7y6ah
+  project: test-koonk
+  version: 1
+  license: Private
+  url: https://app.roboflow.com/test-7y6ah/test-koonk/1

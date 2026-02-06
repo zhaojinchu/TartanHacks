@@ -8,14 +8,7 @@ from typing import Any
 import yaml
 
 CLASS_NAMES: list[str] = [
-    "aluminum_can",
-    "plastic_bottle",
-    "lp_paper_cup",
-    "lp_plastic_cup",
     "rigid_plastic_container",
-    "straw",
-    "utensil",
-    "napkin",
 ]
 
 VALID_BINS: set[str] = {"recycle", "compost", "landfill"}

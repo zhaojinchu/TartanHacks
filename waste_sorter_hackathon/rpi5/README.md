@@ -41,10 +41,21 @@ On the Pi:
 
 ```bash
 cd rpi5
-python3 -m venv .venv
+python3 -m venv .venv --system-site-packages
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+```
+
+For Raspberry Pi Camera Module 2 (libcamera stack), install:
+```bash
+sudo apt update
+sudo apt install -y python3-picamera2
+```
+
+Quick camera sanity test:
+```bash
+libcamera-hello -t 3000
 ```
 
 ## 3) Run real-time webcam inference
@@ -52,6 +63,7 @@ pip install -r requirements.txt
 python scripts/run_realtime.py \
   --model models/waste_sorter.onnx \
   --decision_config configs/decision.yaml \
+  --camera_backend picamera2 \
   --camera_index 0 \
   --imgsz 512 \
   --conf 0.25 \
@@ -68,12 +80,12 @@ python scripts/run_realtime.py --model models/waste_sorter.onnx --save_path runs
 
 - Headless mode (no window):
 ```bash
-python scripts/run_realtime.py --model models/waste_sorter.onnx --no_display
+python scripts/run_realtime.py --model models/waste_sorter.onnx --camera_backend picamera2 --no_display
 ```
 
 - Tune routing quickly:
 ```bash
-python scripts/run_realtime.py --model models/waste_sorter.onnx --threshold 0.65 --window 7
+python scripts/run_realtime.py --model models/waste_sorter.onnx --camera_backend picamera2 --threshold 0.65 --window 7
 ```
 
 ## Decision Output Behavior
@@ -99,3 +111,4 @@ Otherwise top class maps to bin (`recycle`, `compost`, `landfill`) via `configs/
 - Start with `--imgsz 512`; reduce to `384` if FPS is too low.
 - Keep webcam resolution moderate (`1280x720` default in script).
 - Increase `--conf` (for example `0.35`) if too many noisy detections appear.
+- For Camera Module 2, use `--camera_backend picamera2` (recommended).

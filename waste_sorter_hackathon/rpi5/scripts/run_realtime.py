@@ -7,6 +7,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import cv2
 
@@ -17,6 +18,90 @@ if str(ROOT) not in sys.path:
 from src.decision import TemporalDecisionEngine
 from src.io_utils import CLASS_NAMES, load_decision_config
 from src.onnx_detector import ONNXWasteDetector
+
+
+class OpenCVCamera:
+    """OpenCV-based camera source (USB webcams or V4L2 devices)."""
+
+    def __init__(self, camera_index: int, width: int, height: int, fps: float) -> None:
+        self.cap = cv2.VideoCapture(camera_index)
+        if not self.cap.isOpened():
+            raise RuntimeError(f"Failed to open camera index {camera_index} with OpenCV")
+
+        if width > 0:
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, float(width))
+        if height > 0:
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, float(height))
+        if fps > 0:
+            self.cap.set(cv2.CAP_PROP_FPS, float(fps))
+
+    def read(self) -> tuple[bool, Any]:
+        return self.cap.read()
+
+    def release(self) -> None:
+        self.cap.release()
+
+    def output_meta(self, fallback_width: int, fallback_height: int, fallback_fps: float) -> tuple[int, int, float]:
+        width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH) or fallback_width)
+        height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or fallback_height)
+        fps = float(self.cap.get(cv2.CAP_PROP_FPS) or fallback_fps)
+        if fps <= 0:
+            fps = fallback_fps
+        return width, height, fps
+
+
+class PiCamera2Source:
+    """Picamera2-based source for Raspberry Pi Camera Module 2/3 via libcamera."""
+
+    def __init__(self, camera_index: int, width: int, height: int, fps: float) -> None:
+        try:
+            from picamera2 import Picamera2
+        except ImportError as exc:
+            raise RuntimeError(
+                "picamera2 is not installed. Install on Raspberry Pi OS with:\n"
+                "  sudo apt update && sudo apt install -y python3-picamera2\n"
+                "If using venv, recreate with --system-site-packages."
+            ) from exc
+
+        self.width = width
+        self.height = height
+        self.fps = fps if fps > 0 else 30.0
+
+        self.picam2 = Picamera2(camera_index)
+        controls: dict[str, Any] = {}
+        if self.fps > 0:
+            controls["FrameRate"] = float(self.fps)
+
+        config = self.picam2.create_preview_configuration(
+            main={"format": "BGR888", "size": (self.width, self.height)},
+            controls=controls,
+        )
+        self.picam2.configure(config)
+        self.picam2.start()
+        time.sleep(0.2)
+
+    def read(self) -> tuple[bool, Any]:
+        frame = self.picam2.capture_array()
+        if frame is None:
+            return False, None
+
+        if frame.ndim == 2:
+            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        elif frame.ndim == 3 and frame.shape[2] == 4:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+
+        return True, frame
+
+    def release(self) -> None:
+        self.picam2.stop()
+        self.picam2.close()
+
+    def output_meta(self, fallback_width: int, fallback_height: int, fallback_fps: float) -> tuple[int, int, float]:
+        return (
+            int(self.width or fallback_width),
+            int(self.height or fallback_height),
+            float(self.fps or fallback_fps),
+        )
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,8 +121,16 @@ def parse_args() -> argparse.Namespace:
         help="Path to decision YAML",
     )
     parser.add_argument("--camera_index", type=int, default=0)
+    parser.add_argument(
+        "--camera_backend",
+        type=str,
+        default="auto",
+        choices=["auto", "picamera2", "opencv"],
+        help="Camera backend. Use `picamera2` for Raspberry Pi Camera Module 2.",
+    )
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--camera_fps", type=float, default=30.0)
     parser.add_argument("--imgsz", type=int, default=512)
     parser.add_argument("--conf", type=float, default=0.25)
     parser.add_argument("--iou", type=float, default=0.45)
@@ -61,6 +154,37 @@ def parse_args() -> argparse.Namespace:
         help="Print status every N frames",
     )
     return parser.parse_args()
+
+
+def open_camera_source(args: argparse.Namespace) -> tuple[Any, str]:
+    """Open camera with requested backend and return (source, backend_name)."""
+    if args.camera_backend in ("picamera2", "auto"):
+        try:
+            source = PiCamera2Source(
+                camera_index=args.camera_index,
+                width=args.width,
+                height=args.height,
+                fps=args.camera_fps,
+            )
+            return source, "picamera2"
+        except Exception as exc:
+            if args.camera_backend == "picamera2":
+                raise RuntimeError(f"Failed to open Pi camera with picamera2: {exc}") from exc
+            print(f"Warning: picamera2 backend unavailable, falling back to OpenCV. ({exc})")
+
+    try:
+        source = OpenCVCamera(
+            camera_index=args.camera_index,
+            width=args.width,
+            height=args.height,
+            fps=args.camera_fps,
+        )
+        return source, "opencv"
+    except Exception as exc:
+        raise RuntimeError(
+            "Failed to open camera with both picamera2 and OpenCV backends.\n"
+            "For Raspberry Pi Camera Module 2, install picamera2 and use --camera_backend picamera2."
+        ) from exc
 
 
 def draw_overlay(
@@ -129,21 +253,17 @@ def main() -> None:
         class_names=CLASS_NAMES,
     )
 
-    cap = cv2.VideoCapture(args.camera_index)
-    if not cap.isOpened():
-        raise RuntimeError(f"Failed to open camera index {args.camera_index}")
-
-    if args.width > 0:
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, float(args.width))
-    if args.height > 0:
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, float(args.height))
+    camera, backend_name = open_camera_source(args)
+    print(f"Camera backend: {backend_name}")
 
     writer = None
     if args.save_path is not None:
         args.save_path.parent.mkdir(parents=True, exist_ok=True)
-        out_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or args.width)
-        out_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or args.height)
-        out_fps = float(cap.get(cv2.CAP_PROP_FPS) or 20.0)
+        out_w, out_h, out_fps = camera.output_meta(
+            fallback_width=args.width,
+            fallback_height=args.height,
+            fallback_fps=args.camera_fps if args.camera_fps > 0 else 20.0,
+        )
         if out_fps <= 0:
             out_fps = 20.0
 
@@ -166,7 +286,7 @@ def main() -> None:
 
     try:
         while True:
-            ok, frame = cap.read()
+            ok, frame = camera.read()
             if not ok:
                 print("Warning: camera read failed, stopping.")
                 break
@@ -199,7 +319,7 @@ def main() -> None:
                     f"class={last_decision['top_class']} score={last_decision['score']:.2f}"
                 )
     finally:
-        cap.release()
+        camera.release()
         if writer is not None:
             writer.release()
         if not args.no_display:

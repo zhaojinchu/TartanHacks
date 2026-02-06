@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -256,6 +257,11 @@ def main() -> None:
     camera, backend_name = open_camera_source(args)
     print(f"Camera backend: {backend_name}")
 
+    has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    display_enabled = not args.no_display and has_display
+    if not args.no_display and not has_display:
+        print("No GUI display detected. Running in headless mode (display disabled).")
+
     writer = None
     if args.save_path is not None:
         args.save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -306,7 +312,7 @@ def main() -> None:
             if writer is not None:
                 writer.write(frame)
 
-            if not args.no_display:
+            if display_enabled:
                 cv2.imshow("waste_sorter_rpi5", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
@@ -322,7 +328,7 @@ def main() -> None:
         camera.release()
         if writer is not None:
             writer.release()
-        if not args.no_display:
+        if display_enabled:
             cv2.destroyAllWindows()
 
     print(f"Processed frames: {frame_count}")

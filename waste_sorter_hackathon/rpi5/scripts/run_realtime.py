@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import ssl
 import subprocess
 import sys
 import threading
@@ -27,11 +28,24 @@ from src.onnx_detector import ONNXWasteDetector
 class MjpegStreamServer:
     """Very small MJPEG HTTP server for browser viewing."""
 
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        use_tls: bool = False,
+        certfile: Path | None = None,
+        keyfile: Path | None = None,
+    ) -> None:
         self.host = host
         self.port = port
+        self.use_tls = use_tls
         self._frame_jpeg: bytes | None = None
         self._lock = threading.Lock()
+        self._stats_lock = threading.Lock()
+        self._active_clients = 0
+        self._total_clients = 0
+        self._disconnects = 0
+        self._errors = 0
 
         parent = self
 
@@ -52,6 +66,7 @@ class MjpegStreamServer:
                     return
 
                 if self.path == "/stream":
+                    parent._on_client_connect()
                     self.send_response(200)
                     self.send_header(
                         "Content-Type",
@@ -75,7 +90,12 @@ class MjpegStreamServer:
                             self.wfile.write(b"\r\n")
                             time.sleep(0.01)
                     except (BrokenPipeError, ConnectionResetError):
+                        parent._on_client_disconnect(disconnected=True)
                         return
+                    except Exception:
+                        parent._on_client_disconnect(error=True)
+                        return
+                    parent._on_client_disconnect(disconnected=True)
                     return
 
                 self.send_response(404)
@@ -85,6 +105,13 @@ class MjpegStreamServer:
                 return
 
         self._server = server.ThreadingHTTPServer((host, port), Handler)
+        if use_tls:
+            if certfile is None or keyfile is None:
+                raise ValueError("TLS enabled but certfile/keyfile not provided")
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(certfile=str(certfile), keyfile=str(keyfile))
+            self._server.socket = context.wrap_socket(self._server.socket, server_side=True)
+
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
 
     def start(self) -> None:
@@ -102,6 +129,28 @@ class MjpegStreamServer:
         self._server.shutdown()
         self._server.server_close()
         self._thread.join(timeout=1.0)
+
+    def _on_client_connect(self) -> None:
+        with self._stats_lock:
+            self._active_clients += 1
+            self._total_clients += 1
+
+    def _on_client_disconnect(self, disconnected: bool = False, error: bool = False) -> None:
+        with self._stats_lock:
+            self._active_clients = max(self._active_clients - 1, 0)
+            if disconnected:
+                self._disconnects += 1
+            if error:
+                self._errors += 1
+
+    def get_stats(self) -> dict[str, int]:
+        with self._stats_lock:
+            return {
+                "active_clients": self._active_clients,
+                "total_clients": self._total_clients,
+                "disconnects": self._disconnects,
+                "errors": self._errors,
+            }
 
 
 class OpenCVCamera:
@@ -254,8 +303,30 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable browser stream at http://host:port/ (MJPEG).",
     )
+    parser.add_argument(
+        "--https_stream",
+        action="store_true",
+        help="Enable browser stream over HTTPS (TLS).",
+    )
     parser.add_argument("--http_host", type=str, default="0.0.0.0")
     parser.add_argument("--http_port", type=int, default=8080)
+    parser.add_argument(
+        "--tls_cert",
+        type=Path,
+        default=Path("rpi5/certs/cert.pem"),
+        help="TLS certificate path (PEM) for --https_stream.",
+    )
+    parser.add_argument(
+        "--tls_key",
+        type=Path,
+        default=Path("rpi5/certs/key.pem"),
+        help="TLS private key path (PEM) for --https_stream.",
+    )
+    parser.add_argument(
+        "--tls_self_signed",
+        action="store_true",
+        help="Auto-generate self-signed TLS cert/key if missing.",
+    )
     parser.add_argument(
         "--http_quality",
         type=int,
@@ -321,6 +392,70 @@ def read_vcgencmd(key: str) -> str | None:
     except Exception:
         return None
     return result.stdout.strip()
+
+
+def ensure_tls_material(
+    cert_path: Path,
+    key_path: Path,
+    allow_self_signed: bool,
+    host: str,
+) -> tuple[Path, Path]:
+    """Ensure TLS certificate and key exist for HTTPS streaming."""
+    cert_path = cert_path.expanduser().resolve()
+    key_path = key_path.expanduser().resolve()
+
+    if cert_path.exists() and key_path.exists():
+        return cert_path, key_path
+
+    if not allow_self_signed:
+        raise FileNotFoundError(
+            "HTTPS requested but TLS cert/key not found.\n"
+            f"Expected cert: {cert_path}\n"
+            f"Expected key:  {key_path}\n"
+            "Provide --tls_cert/--tls_key or use --tls_self_signed."
+        )
+
+    cert_path.parent.mkdir(parents=True, exist_ok=True)
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cn = host if host not in ("0.0.0.0", "::") else "localhost"
+    cmd = [
+        "openssl",
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-keyout",
+        str(key_path),
+        "-out",
+        str(cert_path),
+        "-days",
+        "365",
+        "-nodes",
+        "-subj",
+        f"/CN={cn}",
+    ]
+
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=15.0)
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "openssl not found. Install openssl or provide existing --tls_cert and --tls_key."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            "Failed to generate self-signed TLS cert with openssl:\n"
+            f"{exc.stderr}"
+        ) from exc
+
+    try:
+        os.chmod(key_path, 0o600)
+    except Exception:
+        pass
+
+    print(f"Generated self-signed cert: {cert_path}")
+    print(f"Generated TLS key: {key_path}")
+    return cert_path, key_path
 
 
 def get_temp_c() -> float | None:
@@ -437,6 +572,8 @@ def main() -> None:
         raise ValueError("--http_quality must be in [1,100]")
     if args.ort_intra_threads < 0 or args.ort_inter_threads < 0:
         raise ValueError("--ort_intra_threads and --ort_inter_threads must be >= 0")
+    if args.http_stream and args.https_stream:
+        raise ValueError("Use only one of --http_stream or --https_stream")
 
     class_to_bin, cfg_threshold, cfg_window = load_decision_config(args.decision_config)
     threshold = args.threshold if args.threshold is not None else cfg_threshold
@@ -468,10 +605,28 @@ def main() -> None:
         print("No GUI display detected. Running in headless mode (display disabled).")
 
     stream_server = None
-    if args.http_stream:
-        stream_server = MjpegStreamServer(host=args.http_host, port=args.http_port)
+    if args.http_stream or args.https_stream:
+        use_tls = bool(args.https_stream)
+        cert_path = None
+        key_path = None
+        if use_tls:
+            cert_path, key_path = ensure_tls_material(
+                cert_path=args.tls_cert,
+                key_path=args.tls_key,
+                allow_self_signed=args.tls_self_signed,
+                host=args.http_host,
+            )
+
+        stream_server = MjpegStreamServer(
+            host=args.http_host,
+            port=args.http_port,
+            use_tls=use_tls,
+            certfile=cert_path,
+            keyfile=key_path,
+        )
         stream_server.start()
-        print(f"HTTP stream: http://{args.http_host}:{args.http_port}/")
+        scheme = "https" if use_tls else "http"
+        print(f"Stream URL: {scheme}://{args.http_host}:{args.http_port}/")
 
     writer = None
     if args.save_path is not None:
@@ -503,6 +658,8 @@ def main() -> None:
     frame_count = 0
     fps_ema = 0.0
     fps_alpha = 0.2
+    encode_ms_ema = 0.0
+    encode_alpha = 0.2
     prev_t = time.perf_counter()
     last_decision: dict[str, object] | None = None
 
@@ -526,10 +683,17 @@ def main() -> None:
             draw_overlay(frame, detections, last_decision, fps_ema)
 
             if stream_server is not None:
+                enc_t0 = time.perf_counter()
                 ok_jpg, jpg = cv2.imencode(
                     ".jpg",
                     frame,
                     [int(cv2.IMWRITE_JPEG_QUALITY), int(args.http_quality)],
+                )
+                enc_ms = (time.perf_counter() - enc_t0) * 1000.0
+                encode_ms_ema = (
+                    enc_ms
+                    if encode_ms_ema == 0.0
+                    else (1 - encode_alpha) * encode_ms_ema + encode_alpha * enc_ms
                 )
                 if ok_jpg:
                     stream_server.update_frame(jpg.tobytes())
@@ -549,6 +713,14 @@ def main() -> None:
                     f"detections={len(detections)} bin={last_decision['final_bin']} "
                     f"class={last_decision['top_class']} score={last_decision['score']:.2f}"
                 )
+                if stream_server is not None:
+                    stream_stats = stream_server.get_stats()
+                    msg += (
+                        " "
+                        f"clients={stream_stats['active_clients']} "
+                        f"enc_ms={encode_ms_ema:.1f} "
+                        f"stream_err={stream_stats['errors']}"
+                    )
                 if args.health_every > 0 and frame_count % args.health_every == 0:
                     health = get_health_snapshot()
                     msg += (
@@ -568,6 +740,11 @@ def main() -> None:
                             "score": round(float(last_decision["score"]), 4),
                             "health": health,
                         }
+                        if stream_server is not None:
+                            health_row["stream"] = {
+                                "encode_ms_ema": round(encode_ms_ema, 3),
+                                **stream_server.get_stats(),
+                            }
                         health_log_file.write(json.dumps(health_row) + "\n")
                         health_log_file.flush()
                 print(msg)

@@ -91,6 +91,39 @@ Open in browser:
 Direct stream URL:
 - `http://<PI_IP>:8080/stream`
 
+## 5) HTTPS stream (TLS)
+Use HTTPS if you want encrypted browser transport.
+
+Self-signed cert (auto-generate):
+```bash
+python scripts/run_realtime.py \
+  --model models/waste_sorter.onnx \
+  --decision_config configs/decision.yaml \
+  --camera_backend picamera2 \
+  --https_stream \
+  --http_host 0.0.0.0 \
+  --http_port 8443 \
+  --tls_self_signed \
+  --no_display
+```
+
+Then open:
+- `https://<PI_IP>:8443/`
+
+Browser warning is expected for self-signed certs.
+
+Use your own cert/key:
+```bash
+python scripts/run_realtime.py \
+  --model models/waste_sorter.onnx \
+  --camera_backend picamera2 \
+  --https_stream \
+  --http_port 8443 \
+  --tls_cert /path/to/cert.pem \
+  --tls_key /path/to/key.pem \
+  --no_display
+```
+
 ## Useful options
 - Save annotated output video:
 ```bash
@@ -166,6 +199,22 @@ python scripts/run_realtime.py \
   --health_log runs/health.jsonl
 ```
 
+To isolate stream overhead, compare three modes for 5-10 minutes each:
+1. No stream: no `--http_stream` / `--https_stream`
+2. HTTP stream: `--http_stream`
+3. HTTPS stream: `--https_stream --tls_self_signed`
+
+Watch:
+- `fps`
+- `enc_ms` (JPEG encode time)
+- `clients`
+- `throttled`
+
+Lower stream load if needed:
+- reduce `--width/--height`
+- reduce `--camera_fps`
+- reduce `--http_quality` (for example `60`)
+
 Check for throttling/undervoltage after reboot:
 ```bash
 vcgencmd get_throttled
@@ -188,5 +237,12 @@ ssh -L 8080:localhost:8080 zhaojin@<PI_IP>
 
 Then open locally:
 - `http://localhost:8080/`
+
+For HTTPS stream on port 8443:
+```bash
+ssh -L 8443:localhost:8443 zhaojin@<PI_IP>
+```
+Then open:
+- `https://localhost:8443/`
 
 This avoids needing open inbound ports from campus network to your Pi.

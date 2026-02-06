@@ -1,0 +1,15 @@
+unknown_threshold: 0.60
+window_size: 5
+
+bins:
+  recycle:
+    - aluminum_can
+    - plastic_bottle
+    - rigid_plastic_container
+  compost:
+    - lp_paper_cup
+  landfill:
+    - lp_plastic_cup
+    - straw
+    - utensil
+    - napkin

@@ -1,0 +1,101 @@
+# Raspberry Pi 5 Runtime (Real-Time Inference)
+
+This folder is a self-contained runtime for running your exported ONNX waste sorter model on Raspberry Pi 5.
+
+It uses:
+- `onnxruntime` for inference (CPU)
+- `opencv-python` for webcam/video I/O
+- temporal smoothing + threshold routing logic (same behavior as training project)
+
+## Folder Structure
+```text
+rpi5/
+  configs/
+    decision.yaml
+  models/
+    waste_sorter.onnx      # place exported model here
+  scripts/
+    run_realtime.py
+  src/
+    io_utils.py
+    decision.py
+    onnx_detector.py
+  requirements.txt
+```
+
+## 1) Export model on your Mac
+From the main project root (`waste_sorter_hackathon/`):
+
+```bash
+python scripts/export_onnx.py \
+  --weights runs_hack/baseline/weights/best.pt \
+  --opset 12 \
+  --imgsz 512
+```
+
+Copy the generated `.onnx` file into:
+- `rpi5/models/waste_sorter.onnx`
+
+## 2) Setup on Raspberry Pi 5
+On the Pi:
+
+```bash
+cd rpi5
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+## 3) Run real-time webcam inference
+```bash
+python scripts/run_realtime.py \
+  --model models/waste_sorter.onnx \
+  --decision_config configs/decision.yaml \
+  --camera_index 0 \
+  --imgsz 512 \
+  --conf 0.25 \
+  --iou 0.45
+```
+
+Press `q` to quit.
+
+## Useful options
+- Save annotated output video:
+```bash
+python scripts/run_realtime.py --model models/waste_sorter.onnx --save_path runs/rpi5_demo.mp4
+```
+
+- Headless mode (no window):
+```bash
+python scripts/run_realtime.py --model models/waste_sorter.onnx --no_display
+```
+
+- Tune routing quickly:
+```bash
+python scripts/run_realtime.py --model models/waste_sorter.onnx --threshold 0.65 --window 7
+```
+
+## Decision Output Behavior
+Per frame, detections are smoothed over a rolling window.
+
+If top smoothed class score is below threshold (`unknown_threshold`), output becomes:
+- `final_bin = landfill`
+- `reason = unknown_low_conf`
+
+Otherwise top class maps to bin (`recycle`, `compost`, `landfill`) via `configs/decision.yaml`.
+
+## Locked classes (must match training/export)
+0 `aluminum_can`
+1 `plastic_bottle`
+2 `lp_paper_cup`
+3 `lp_plastic_cup`
+4 `rigid_plastic_container`
+5 `straw`
+6 `utensil`
+7 `napkin`
+
+## Notes for Pi performance
+- Start with `--imgsz 512`; reduce to `384` if FPS is too low.
+- Keep webcam resolution moderate (`1280x720` default in script).
+- Increase `--conf` (for example `0.35`) if too many noisy detections appear.

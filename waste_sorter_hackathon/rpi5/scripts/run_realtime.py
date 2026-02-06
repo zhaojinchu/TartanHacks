@@ -206,7 +206,8 @@ class PiCamera2Source:
             controls["FrameRate"] = float(self.fps)
 
         config = self.picam2.create_preview_configuration(
-            main={"format": "BGR888", "size": (self.width, self.height)},
+            # Use RGB888 and convert to BGR explicitly to avoid blue/red channel swaps.
+            main={"format": "RGB888", "size": (self.width, self.height)},
             controls=controls,
         )
         self.picam2.configure(config)
@@ -220,8 +221,10 @@ class PiCamera2Source:
 
         if frame.ndim == 2:
             frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        elif frame.ndim == 3 and frame.shape[2] == 3:
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         elif frame.ndim == 3 and frame.shape[2] == 4:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
 
         return True, frame
 

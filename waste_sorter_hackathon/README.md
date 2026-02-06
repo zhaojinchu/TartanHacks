@@ -272,3 +272,71 @@ Use the dedicated runtime in `rpi5/`:
 - ONNX Runtime + OpenCV real-time inference script
 - Pi-specific requirements and decision config
 - step-by-step setup and run instructions in `rpi5/README.md`
+
+## Common Commands (Copy-Paste)
+Run from repo root (`waste_sorter_hackathon/`) unless noted.
+
+```bash
+# 1) Train (Mac)
+python3.11 scripts/train.py \
+  --data configs/data.yaml \
+  --model yolov8n.pt \
+  --imgsz 512 \
+  --epochs 50 \
+  --batch 32 \
+  --project runs_hack \
+  --name baseline \
+  --device auto \
+  --seed 42
+
+# 2) Export ONNX (Mac)
+python3.11 scripts/export_onnx.py \
+  --weights runs_hack/baseline/weights/best.pt \
+  --opset 12 \
+  --imgsz 512
+
+# 3) Copy ONNX to Pi (from Mac)
+scp runs_hack/baseline/weights/best.onnx \
+  zhaojin@<PI_IP>:~/Projects/TartanHacks/waste_sorter_hackathon/rpi5/models/waste_sorter.onnx
+
+# 4) Pi setup (on Raspberry Pi)
+cd ~/Projects/TartanHacks/waste_sorter_hackathon
+python3 -m venv .venv --system-site-packages
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r rpi5/requirements.txt
+
+# 5) Pi real-time inference (headless, recommended)
+python rpi5/scripts/run_realtime.py \
+  --model rpi5/models/waste_sorter.onnx \
+  --decision_config rpi5/configs/decision.yaml \
+  --camera_backend picamera2 \
+  --no_display \
+  --conf 0.10 \
+  --iou 0.45 \
+  --width 960 --height 540 \
+  --camera_fps 15
+
+# 6) Pi HTTPS stream mode (headless)
+python rpi5/scripts/run_realtime.py \
+  --model rpi5/models/waste_sorter.onnx \
+  --decision_config rpi5/configs/decision.yaml \
+  --camera_backend picamera2 \
+  --https_stream \
+  --http_host 0.0.0.0 \
+  --http_port 8443 \
+  --tls_self_signed \
+  --no_display
+
+# 7) SSH tunnel for HTTPS stream (run on laptop)
+ssh -L 8443:localhost:8443 zhaojin@<PI_IP>
+# then open https://localhost:8443/
+
+# 8) Pi single-image test (any dataset image, no manual preprocessing needed)
+python rpi5/scripts/infer_image.py \
+  --model rpi5/models/waste_sorter.onnx \
+  --image dataset/train/images/<your_image>.jpg \
+  --decision_config rpi5/configs/decision.yaml \
+  --conf 0.10 \
+  --iou 0.45
+```

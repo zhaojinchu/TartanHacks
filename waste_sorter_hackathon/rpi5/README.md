@@ -72,6 +72,25 @@ python scripts/run_realtime.py \
 
 Press `q` to quit.
 
+## 4) View live feed in browser (HTTP stream)
+Start runtime with MJPEG stream enabled:
+```bash
+python scripts/run_realtime.py \
+  --model models/waste_sorter.onnx \
+  --decision_config configs/decision.yaml \
+  --camera_backend picamera2 \
+  --http_stream \
+  --http_host 0.0.0.0 \
+  --http_port 8080 \
+  --no_display
+```
+
+Open in browser:
+- `http://<PI_IP>:8080/`
+
+Direct stream URL:
+- `http://<PI_IP>:8080/stream`
+
 ## Useful options
 - Save annotated output video:
 ```bash
@@ -112,3 +131,18 @@ Otherwise top class maps to bin (`recycle`, `compost`, `landfill`) via `configs/
 - Keep webcam resolution moderate (`1280x720` default in script).
 - Increase `--conf` (for example `0.35`) if too many noisy detections appear.
 - For Camera Module 2, use `--camera_backend picamera2` (recommended).
+- HTTP stream adds JPEG encoding overhead; lower resolution first if FPS drops.
+
+## Campus Wi-Fi Note (CMU-Secure / WPA2-Enterprise)
+It may work directly at `http://<PI_IP>:8080/` if client-to-client traffic is allowed on your network segment.
+
+If direct access is blocked, use SSH tunnel (reliable):
+```bash
+# Run on your laptop:
+ssh -L 8080:localhost:8080 zhaojin@<PI_IP>
+```
+
+Then open locally:
+- `http://localhost:8080/`
+
+This avoids needing open inbound ports from campus network to your Pi.

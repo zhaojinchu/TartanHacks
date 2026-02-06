@@ -6,7 +6,9 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
+from http import server
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +21,86 @@ if str(ROOT) not in sys.path:
 from src.decision import TemporalDecisionEngine
 from src.io_utils import CLASS_NAMES, load_decision_config
 from src.onnx_detector import ONNXWasteDetector
+
+
+class MjpegStreamServer:
+    """Very small MJPEG HTTP server for browser viewing."""
+
+    def __init__(self, host: str, port: int) -> None:
+        self.host = host
+        self.port = port
+        self._frame_jpeg: bytes | None = None
+        self._lock = threading.Lock()
+
+        parent = self
+
+        class Handler(server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                if self.path in ("/", "/index.html"):
+                    body = (
+                        "<html><head><title>Waste Sorter Stream</title></head>"
+                        "<body style='margin:0;background:#111;'>"
+                        "<img src='/stream' style='width:100%;height:auto;'/>"
+                        "</body></html>"
+                    ).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+
+                if self.path == "/stream":
+                    self.send_response(200)
+                    self.send_header(
+                        "Content-Type",
+                        "multipart/x-mixed-replace; boundary=frame",
+                    )
+                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("Pragma", "no-cache")
+                    self.end_headers()
+
+                    try:
+                        while True:
+                            frame = parent.get_frame()
+                            if frame is None:
+                                time.sleep(0.03)
+                                continue
+
+                            self.wfile.write(b"--frame\r\n")
+                            self.wfile.write(b"Content-Type: image/jpeg\r\n")
+                            self.wfile.write(f"Content-Length: {len(frame)}\r\n\r\n".encode("utf-8"))
+                            self.wfile.write(frame)
+                            self.wfile.write(b"\r\n")
+                            time.sleep(0.01)
+                    except (BrokenPipeError, ConnectionResetError):
+                        return
+                    return
+
+                self.send_response(404)
+                self.end_headers()
+
+            def log_message(self, format: str, *args: Any) -> None:
+                return
+
+        self._server = server.ThreadingHTTPServer((host, port), Handler)
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def update_frame(self, frame_jpeg: bytes) -> None:
+        with self._lock:
+            self._frame_jpeg = frame_jpeg
+
+    def get_frame(self) -> bytes | None:
+        with self._lock:
+            return self._frame_jpeg
+
+    def stop(self) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+        self._thread.join(timeout=1.0)
 
 
 class OpenCVCamera:
@@ -154,6 +236,19 @@ def parse_args() -> argparse.Namespace:
         default=30,
         help="Print status every N frames",
     )
+    parser.add_argument(
+        "--http_stream",
+        action="store_true",
+        help="Enable browser stream at http://host:port/ (MJPEG).",
+    )
+    parser.add_argument("--http_host", type=str, default="0.0.0.0")
+    parser.add_argument("--http_port", type=int, default=8080)
+    parser.add_argument(
+        "--http_quality",
+        type=int,
+        default=80,
+        help="JPEG quality [1..100] for HTTP stream.",
+    )
     return parser.parse_args()
 
 
@@ -234,6 +329,8 @@ def draw_overlay(
 
 def main() -> None:
     args = parse_args()
+    if not (1 <= args.http_quality <= 100):
+        raise ValueError("--http_quality must be in [1,100]")
 
     class_to_bin, cfg_threshold, cfg_window = load_decision_config(args.decision_config)
     threshold = args.threshold if args.threshold is not None else cfg_threshold
@@ -261,6 +358,12 @@ def main() -> None:
     display_enabled = not args.no_display and has_display
     if not args.no_display and not has_display:
         print("No GUI display detected. Running in headless mode (display disabled).")
+
+    stream_server = None
+    if args.http_stream:
+        stream_server = MjpegStreamServer(host=args.http_host, port=args.http_port)
+        stream_server.start()
+        print(f"HTTP stream: http://{args.http_host}:{args.http_port}/")
 
     writer = None
     if args.save_path is not None:
@@ -309,6 +412,15 @@ def main() -> None:
 
             draw_overlay(frame, detections, last_decision, fps_ema)
 
+            if stream_server is not None:
+                ok_jpg, jpg = cv2.imencode(
+                    ".jpg",
+                    frame,
+                    [int(cv2.IMWRITE_JPEG_QUALITY), int(args.http_quality)],
+                )
+                if ok_jpg:
+                    stream_server.update_frame(jpg.tobytes())
+
             if writer is not None:
                 writer.write(frame)
 
@@ -324,10 +436,14 @@ def main() -> None:
                     f"detections={len(detections)} bin={last_decision['final_bin']} "
                     f"class={last_decision['top_class']} score={last_decision['score']:.2f}"
                 )
+    except KeyboardInterrupt:
+        print("Interrupted by user. Stopping...")
     finally:
         camera.release()
         if writer is not None:
             writer.release()
+        if stream_server is not None:
+            stream_server.stop()
         if display_enabled:
             cv2.destroyAllWindows()
 

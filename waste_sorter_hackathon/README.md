@@ -182,6 +182,23 @@ python waste_sorter_hackathon/scripts/infer_webcam.py \
 
 Press `q` to quit.
 
+Webcam inference + direct Arduino servo control from Mac (no Pi):
+```bash
+python waste_sorter_hackathon/scripts/infer_webcam.py \
+  --weights runs_hack/baseline/weights/best.pt \
+  --decision_config waste_sorter_hackathon/configs/decision.yaml \
+  --conf 0.25 \
+  --iou 0.45 \
+  --servo_enable \
+  --arduino_port auto \
+  --arduino_baud 115200 \
+  --servo_open_seconds 5
+```
+Behavior:
+- one bin opens at a time
+- bin stays open 5 seconds, then closes
+- additional recognized bins are queued serially
+
 ### 11) Routing demo (smoothed final bin)
 ```bash
 python scripts/route_demo.py \

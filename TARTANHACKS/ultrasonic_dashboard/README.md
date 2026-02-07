@@ -137,6 +137,11 @@ Calibration helper:
 python scripts/calibrate_bins.py
 ```
 
+Manual keyboard control for lids (sends `O0/C0/O1/C1/O2/C2` to backend):
+```bash
+python scripts/manual_bin_cli.py --api-base http://localhost:8000
+```
+
 ## Raspberry Pi Notes
 - HC-SR04 Echo pin is 5V; use a resistor divider before Pi GPIO input.
 - For serial mode, wire sensors to Arduino and connect Arduino USB to Pi (`/dev/ttyACM0` by default).

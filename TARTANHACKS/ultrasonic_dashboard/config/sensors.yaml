@@ -1,9 +1,9 @@
-mode: mock
+mode: serial
 cleanup_gpio_on_exit: true
 
 serial:
   port: /dev/ttyACM0
-  baudrate: 9600
+  baudrate: 115200
   timeout_seconds: 0.2
   stale_seconds: 3.0
   startup_delay_seconds: 2.0

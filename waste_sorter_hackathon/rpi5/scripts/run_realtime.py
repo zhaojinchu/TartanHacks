@@ -13,6 +13,7 @@ import time
 from http import server
 from pathlib import Path
 from typing import Any
+from urllib import error, request
 
 import cv2
 
@@ -23,6 +24,147 @@ if str(ROOT) not in sys.path:
 from src.decision import TemporalDecisionEngine
 from src.io_utils import load_decision_config, resolve_class_names
 from src.onnx_detector import ONNXWasteDetector
+
+
+BIN_TO_CHANNEL: dict[str, int] = {
+    "bottles": 0,
+    "recycle": 0,
+    "bottles-cans": 0,
+    "compost": 1,
+    "compostables": 1,
+    "landfill": 2,
+}
+
+
+class ServoQueueController:
+    """Send Arduino open/close commands in strict sequence (no overlap)."""
+
+    def __init__(
+        self,
+        *,
+        api_base: str,
+        open_seconds: float,
+        settle_seconds: float,
+        trigger_interval: float,
+        min_score: float,
+    ) -> None:
+        self.api_base = api_base.rstrip("/")
+        self.open_seconds = max(open_seconds, 0.1)
+        self.settle_seconds = max(settle_seconds, 0.0)
+        self.trigger_interval = max(trigger_interval, 0.0)
+        self.min_score = max(min_score, 0.0)
+
+        self._queue: list[int] = []
+        self._pending: set[int] = set()
+        self._last_enqueue: dict[int, float] = {}
+        self._current: int | None = None
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._worker, daemon=True, name="servo-queue")
+
+    def start(self) -> None:
+        print(
+            "Servo queue enabled: "
+            f"api_base={self.api_base} open_seconds={self.open_seconds} "
+            f"settle_seconds={self.settle_seconds} trigger_interval={self.trigger_interval} "
+            f"min_score={self.min_score}"
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        self._thread.join(timeout=2.0)
+        self.close_all()
+
+    def queue_length(self) -> int:
+        with self._lock:
+            return len(self._queue) + (1 if self._current is not None else 0)
+
+    def enqueue_from_decision(self, decision: dict[str, object]) -> None:
+        reason = str(decision.get("reason", ""))
+        if reason != "mapped_from_class":
+            return
+
+        score = float(decision.get("score", 0.0))
+        if score < self.min_score:
+            return
+
+        bin_name = str(decision.get("final_bin", "")).strip().lower()
+        channel = BIN_TO_CHANNEL.get(bin_name)
+        if channel is None:
+            return
+
+        now = time.monotonic()
+        with self._lock:
+            last = self._last_enqueue.get(channel, 0.0)
+            if now - last < self.trigger_interval:
+                return
+            if channel in self._pending or channel == self._current:
+                return
+
+            self._queue.append(channel)
+            self._pending.add(channel)
+            self._last_enqueue[channel] = now
+            print(f"[servo] queued bin={bin_name} channel={channel}")
+
+    def close_all(self) -> None:
+        for channel in (0, 1, 2):
+            self._send(f"C{channel}")
+
+    def _worker(self) -> None:
+        while not self._stop_event.is_set():
+            channel: int | None = None
+            with self._lock:
+                if self._queue:
+                    channel = self._queue.pop(0)
+                    self._current = channel
+
+            if channel is None:
+                time.sleep(0.05)
+                continue
+
+            try:
+                opened = self._send(f"O{channel}")
+                if opened:
+                    time.sleep(self.open_seconds)
+                self._send(f"C{channel}")
+                if self.settle_seconds > 0:
+                    time.sleep(self.settle_seconds)
+            finally:
+                with self._lock:
+                    self._pending.discard(channel)
+                    if self._current == channel:
+                        self._current = None
+
+    def _send(self, command: str) -> bool:
+        url = f"{self.api_base}/api/arduino/command"
+        payload = json.dumps({"command": command}).encode("utf-8")
+        req = request.Request(
+            url=url,
+            method="POST",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with request.urlopen(req, timeout=2.0) as resp:
+                body = resp.read().decode("utf-8", errors="ignore")
+            if body:
+                parsed = json.loads(body)
+                ok = bool(parsed.get("ok"))
+            else:
+                ok = False
+            if ok:
+                print(f"[servo] sent {command}")
+            else:
+                print(f"[servo] command failed {command}: {body}")
+            return ok
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")
+            print(f"[servo] HTTP {exc.code} for {command}: {detail}")
+            return False
+        except Exception as exc:
+            print(f"[servo] request error for {command}: {exc}")
+            return False
 
 
 class MjpegStreamServer:
@@ -399,6 +541,41 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional path to append health stats as JSONL.",
     )
+    parser.add_argument(
+        "--servo_enable",
+        action="store_true",
+        help="Enable automatic servo control by posting O/C commands to backend API.",
+    )
+    parser.add_argument(
+        "--servo_api_base",
+        type=str,
+        default="http://localhost:8000",
+        help="Backend API base URL for /api/arduino/command.",
+    )
+    parser.add_argument(
+        "--servo_open_seconds",
+        type=float,
+        default=5.0,
+        help="Seconds to keep one bin open before closing.",
+    )
+    parser.add_argument(
+        "--servo_settle_seconds",
+        type=float,
+        default=0.4,
+        help="Pause after closing before processing next queued bin.",
+    )
+    parser.add_argument(
+        "--servo_trigger_interval",
+        type=float,
+        default=1.5,
+        help="Minimum seconds between queueing the same bin.",
+    )
+    parser.add_argument(
+        "--servo_min_score",
+        type=float,
+        default=0.60,
+        help="Minimum smoothed decision score required to queue a servo action.",
+    )
     return parser.parse_args()
 
 
@@ -725,6 +902,17 @@ def main() -> None:
         args.health_log.parent.mkdir(parents=True, exist_ok=True)
         health_log_file = args.health_log.open("a", encoding="utf-8")
 
+    servo_controller: ServoQueueController | None = None
+    if args.servo_enable:
+        servo_controller = ServoQueueController(
+            api_base=args.servo_api_base,
+            open_seconds=args.servo_open_seconds,
+            settle_seconds=args.servo_settle_seconds,
+            trigger_interval=args.servo_trigger_interval,
+            min_score=args.servo_min_score,
+        )
+        servo_controller.start()
+
     print("Running real-time inference. Press 'q' to quit.")
 
     frame_count = 0
@@ -745,6 +933,8 @@ def main() -> None:
             detections = detector.predict(frame)
             decision_input = [(det.class_id, det.confidence) for det in detections]
             last_decision = decision_engine.update(decision_input)
+            if servo_controller is not None:
+                servo_controller.enqueue_from_decision(last_decision)
 
             now = time.perf_counter()
             dt = max(now - prev_t, 1e-6)
@@ -785,6 +975,8 @@ def main() -> None:
                     f"detections={len(detections)} bin={last_decision['final_bin']} "
                     f"class={last_decision['top_class']} score={last_decision['score']:.2f}"
                 )
+                if servo_controller is not None:
+                    msg += f" servo_queue={servo_controller.queue_length()}"
                 if stream_server is not None:
                     stream_stats = stream_server.get_stats()
                     msg += (
@@ -830,6 +1022,8 @@ def main() -> None:
             health_log_file.close()
         if stream_server is not None:
             stream_server.stop()
+        if servo_controller is not None:
+            servo_controller.stop()
         if display_enabled:
             cv2.destroyAllWindows()
 

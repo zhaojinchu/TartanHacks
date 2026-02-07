@@ -188,6 +188,29 @@ python scripts/run_realtime.py \
   --no_display
 ```
 
+## Servo auto-control (single-bin queue)
+If your ultrasonic backend is running and Arduino commands are available at
+`POST http://localhost:8000/api/arduino/command`, you can auto-open lids from
+vision decisions with strict one-at-a-time sequencing:
+
+```bash
+python scripts/run_realtime.py \
+  --model models/waste_sorter.onnx \
+  --decision_config configs/decision.yaml \
+  --camera_backend picamera2 \
+  --no_display \
+  --servo_enable \
+  --servo_api_base http://localhost:8000 \
+  --servo_open_seconds 5 \
+  --servo_settle_seconds 0.4 \
+  --servo_trigger_interval 1.5
+```
+
+Behavior:
+- only one bin opens at a time
+- each open command holds for 5 seconds, then closes
+- additional recognized bins are queued and handled serially
+
 ## Decision Output Behavior
 Per frame, detections are smoothed over a rolling window.
 

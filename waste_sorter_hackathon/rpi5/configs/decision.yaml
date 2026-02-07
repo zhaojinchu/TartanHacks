@@ -3,6 +3,16 @@ window_size: 5
 
 bins:
   recycle:
+    - lp_cup_lids
+    - lp_plastic_cup
     - rigid_plastic_container
-  compost: []
-  landfill: []
+    - rigid_plastic_lid
+    - small_plastic_container
+
+  compost:
+    - lp_paper_cup
+    - napkin
+
+  landfill:
+    - straw
+    - utensil

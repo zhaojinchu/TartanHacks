@@ -1,0 +1,38 @@
+bins:
+  - id: recycle_1
+    type: recycle
+    location: Building_A_Floor_1
+    height_cm: 80
+    sensor_offset_cm: 5
+    gpio_trigger: 23
+    gpio_echo: 24
+
+  - id: compost_1
+    type: compost
+    location: Building_A_Floor_1
+    height_cm: 75
+    sensor_offset_cm: 4
+    gpio_trigger: 17
+    gpio_echo: 27
+
+  - id: landfill_1
+    type: landfill
+    location: Building_A_Floor_2
+    height_cm: 85
+    sensor_offset_cm: 5
+    gpio_trigger: 5
+    gpio_echo: 6
+
+  - id: recycle_2
+    type: recycle
+    location: Building_B_Floor_1
+    height_cm: 90
+    sensor_offset_cm: 6
+    gpio_trigger: 22
+    gpio_echo: 10
+
+measurement:
+  interval_seconds: 5
+  samples_per_read: 3
+  sensor_timeout_seconds: 0.04
+  auto_start_collector: true

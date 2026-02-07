@@ -1,0 +1,56 @@
+# Bin Configuration for Ultrasonic Monitoring System
+# Each bin requires an ultrasonic sensor (HC-SR04) connected to GPIO pins
+
+bins:
+  # Example Recycle Bin
+  - id: "recycle_1"
+    type: "recycle"
+    location: "Building_A_Floor_1_Hallway"
+    description: "Main recycling bin near entrance"
+    height_cm: 80              # Internal height of bin from bottom to top
+    sensor_offset_cm: 5        # Distance from sensor to empty bin bottom
+    gpio_trigger: 23           # GPIO pin number for trigger signal
+    gpio_echo: 24              # GPIO pin number for echo signal
+    enabled: true
+
+  # Example Compost Bin
+  - id: "compost_1"
+    type: "compost"
+    location: "Building_A_Floor_1_Kitchen"
+    description: "Kitchen compost bin"
+    height_cm: 75
+    sensor_offset_cm: 5
+    gpio_trigger: 17
+    gpio_echo: 27
+    enabled: true
+
+  # Example Landfill Bin
+  - id: "landfill_1"
+    type: "landfill"
+    location: "Building_A_Floor_1_Hallway"
+    description: "General waste bin"
+    height_cm: 85
+    sensor_offset_cm: 5
+    gpio_trigger: 22
+    gpio_echo: 10
+    enabled: true
+
+# Status thresholds (percentage full)
+thresholds:
+  normal_max: 70        # 0-70%: Green status (normal)
+  warning_max: 85       # 70-85%: Yellow status (almost full)
+  critical_min: 85      # 85-100%: Red status (needs emptying)
+
+# Measurement settings
+measurement:
+  interval_seconds: 60           # How often to measure each bin
+  samples_per_read: 5            # Number of readings to average
+  max_distance_cm: 400           # Maximum sensor range
+  measurement_timeout_ms: 30     # Sensor timeout in milliseconds
+
+# Alert settings
+alerts:
+  almost_full_threshold: 85      # Send alert when bin reaches this %
+  full_threshold: 95             # Critical alert threshold
+  enable_notifications: true
+  notification_cooldown_minutes: 30  # Minimum time between repeat alerts for same bin

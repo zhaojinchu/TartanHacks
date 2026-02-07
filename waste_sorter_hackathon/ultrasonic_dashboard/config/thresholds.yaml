@@ -1,0 +1,57 @@
+# Alert and Notification Thresholds
+
+# Alert levels based on bin fullness percentage
+alert_levels:
+  normal:
+    min: 0
+    max: 70
+    color: "green"
+    priority: "low"
+
+  warning:
+    min: 70
+    max: 85
+    color: "yellow"
+    priority: "medium"
+
+  critical:
+    min: 85
+    max: 100
+    color: "red"
+    priority: "high"
+
+# Notification settings
+notifications:
+  email:
+    enabled: true
+    recipients:
+      - "facilities@example.com"
+      - "maintenance@example.com"
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    from_address: "bin-monitor@example.com"
+
+  sms:
+    enabled: false
+    recipients:
+      - "+1234567890"
+
+  webhook:
+    enabled: false
+    url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+
+# Cooldown to prevent alert spam
+cooldown:
+  minutes: 30  # Don't send repeat alerts for same bin within this time
+
+# Prediction settings
+predictions:
+  min_data_points: 20          # Minimum measurements needed for prediction
+  confidence_threshold: 0.7    # Minimum confidence to show prediction
+  lookahead_hours: 48          # How far ahead to predict
+
+# Schedule optimization
+scheduling:
+  max_route_duration_hours: 4  # Maximum time for single collection route
+  prefer_full_bins: true       # Prioritize fuller bins in route optimization
+  group_by_location: true      # Group nearby bins together

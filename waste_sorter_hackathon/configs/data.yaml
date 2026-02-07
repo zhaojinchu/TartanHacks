@@ -1,16 +1,17 @@
-# Update `path` to your dataset root if needed.
+# Dataset config - Updated for TartanHacks v1 (9 classes)
 path: dataset
 train: train/images
 val: valid/images
 test: test/images
 
-nc: 8
+nc: 9
 names:
-  - aluminum_can
-  - plastic_bottle
+  - lp_cup_lids
   - lp_paper_cup
   - lp_plastic_cup
+  - napkin
   - rigid_plastic_container
+  - rigid_plastic_lid
+  - small_plastic_container
   - straw
   - utensil
-  - napkin

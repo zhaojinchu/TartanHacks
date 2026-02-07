@@ -8,14 +8,15 @@ from typing import Any
 import yaml
 
 DEFAULT_CLASS_NAMES: list[str] = [
-    "aluminum_can",
-    "plastic_bottle",
+    "lp_cup_lids",
     "lp_paper_cup",
     "lp_plastic_cup",
+    "napkin",
     "rigid_plastic_container",
+    "rigid_plastic_lid",
+    "small_plastic_container",
     "straw",
     "utensil",
-    "napkin",
 ]
 
 VALID_BINS: set[str] = {"recycle", "compost", "landfill"}

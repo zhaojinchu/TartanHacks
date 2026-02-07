@@ -8,6 +8,7 @@ from typing import Any, Literal
 import yaml
 
 BinType = Literal["recycle", "compost", "landfill"]
+SensorMode = Literal["mock", "gpio", "serial"]
 
 
 @dataclass(slots=True)
@@ -19,14 +20,15 @@ class BinDefinition:
     sensor_offset_cm: float
     gpio_trigger: int
     gpio_echo: int
+    sensor_channel: int | None = None
 
 
 @dataclass(slots=True)
 class ThresholdConfig:
     normal_max: float = 70.0
-    warning_max: float = 85.0
+    warning_max: float = 90.0
     full_min: float = 95.0
-    alert_critical: float = 85.0
+    alert_critical: float = 90.0
 
 
 @dataclass(slots=True)
@@ -39,8 +41,13 @@ class MeasurementConfig:
 
 @dataclass(slots=True)
 class SensorRuntimeConfig:
-    mock_mode: bool = True
+    mode: SensorMode = "mock"
     cleanup_gpio_on_exit: bool = True
+    serial_port: str = "/dev/ttyACM0"
+    serial_baudrate: int = 9600
+    serial_timeout_seconds: float = 0.2
+    serial_stale_seconds: float = 5.0
+    serial_startup_delay_seconds: float = 2.0
 
 
 @dataclass(slots=True)
@@ -96,6 +103,7 @@ def _parse_bins(raw_bins: list[dict[str, Any]]) -> list[BinDefinition]:
                 sensor_offset_cm=float(item.get("sensor_offset_cm", 0.0)),
                 gpio_trigger=int(item["gpio_trigger"]),
                 gpio_echo=int(item["gpio_echo"]),
+                sensor_channel=int(item["sensor_channel"]) if item.get("sensor_channel") is not None else None,
             )
         )
     return bins
@@ -117,9 +125,9 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
     bins = _parse_bins(bins_raw)
     thresholds = ThresholdConfig(
         normal_max=float(thresholds_cfg.get("normal_max", 70)),
-        warning_max=float(thresholds_cfg.get("warning_max", 85)),
+        warning_max=float(thresholds_cfg.get("warning_max", 90)),
         full_min=float(thresholds_cfg.get("full_min", 95)),
-        alert_critical=float(thresholds_cfg.get("alert_critical", 85)),
+        alert_critical=float(thresholds_cfg.get("alert_critical", 90)),
     )
 
     measurement_raw = bins_cfg.get("measurement", {})
@@ -130,9 +138,24 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
         auto_start_collector=bool(measurement_raw.get("auto_start_collector", True)),
     )
 
+    mode_raw = str(sensors_cfg.get("mode", "")).strip().lower()
+    if not mode_raw:
+        mode_raw = "mock" if bool(sensors_cfg.get("mock_mode", True)) else "gpio"
+    if mode_raw not in {"mock", "gpio", "serial"}:
+        raise ConfigError(f"Invalid sensors.mode `{mode_raw}`. Use mock|gpio|serial.")
+
+    serial_cfg = sensors_cfg.get("serial", {})
+    if not isinstance(serial_cfg, dict):
+        raise ConfigError("sensors.serial must be a dictionary")
+
     sensor_runtime = SensorRuntimeConfig(
-        mock_mode=bool(sensors_cfg.get("mock_mode", True)),
+        mode=mode_raw,  # type: ignore[arg-type]
         cleanup_gpio_on_exit=bool(sensors_cfg.get("cleanup_gpio_on_exit", True)),
+        serial_port=str(serial_cfg.get("port", "/dev/ttyACM0")),
+        serial_baudrate=int(serial_cfg.get("baudrate", 9600)),
+        serial_timeout_seconds=float(serial_cfg.get("timeout_seconds", 0.2)),
+        serial_stale_seconds=float(serial_cfg.get("stale_seconds", 5.0)),
+        serial_startup_delay_seconds=float(serial_cfg.get("startup_delay_seconds", 2.0)),
     )
 
     db_path_raw = sensors_cfg.get("database", {}).get("path", "./data/ultrasonic.db")

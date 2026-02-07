@@ -1,4 +1,4 @@
 normal_max: 70
-warning_max: 85
+warning_max: 90
 full_min: 95
-alert_critical: 85
+alert_critical: 90

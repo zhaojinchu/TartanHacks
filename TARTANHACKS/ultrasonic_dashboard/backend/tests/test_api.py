@@ -73,3 +73,15 @@ def test_bins_endpoint(monkeypatch, tmp_path: Path) -> None:
         payload = response.json()
         assert isinstance(payload, list)
         assert payload[0]["bin_id"] == "recycle_1"
+
+
+def test_arduino_command_validation(monkeypatch, tmp_path: Path) -> None:
+    config_dir = _write_config(tmp_path)
+    monkeypatch.setenv("ULTRASONIC_CONFIG_DIR", str(config_dir))
+
+    from src.main import app
+
+    with TestClient(app) as client:
+        response = client.post("/api/arduino/command", json={"command": "HELLO"})
+        assert response.status_code == 400
+        assert "Invalid command" in response.json()["detail"]

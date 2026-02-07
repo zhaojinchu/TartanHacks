@@ -1,5 +1,12 @@
-mock_mode: true
+mode: mock
 cleanup_gpio_on_exit: true
+
+serial:
+  port: /dev/ttyACM0
+  baudrate: 9600
+  timeout_seconds: 0.2
+  stale_seconds: 3.0
+  startup_delay_seconds: 2.0
 
 database:
   path: ./data/ultrasonic.db

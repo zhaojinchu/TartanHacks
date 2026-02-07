@@ -46,23 +46,36 @@ def calculate_fill_rate(rows: list[dict[str, Any]], window_hours: int = 24) -> t
         if now - ts <= timedelta(hours=window_hours):
             filtered.append((ts, float(fullness)))
 
-    if len(filtered) < 2:
+    filtered.sort(key=lambda item: item[0])
+    if len(filtered) < 3:
         return None, None
 
-    origin = filtered[0][0]
-    x = np.array([(ts - origin).total_seconds() / 3600.0 for ts, _ in filtered], dtype=float)
-    y = np.array([val for _, val in filtered], dtype=float)
+    weighted_rates: list[tuple[float, float]] = []
+    for (prev_ts, prev_fullness), (curr_ts, curr_fullness) in zip(filtered, filtered[1:], strict=False):
+        dt_hours = (curr_ts - prev_ts).total_seconds() / 3600.0
+        if dt_hours <= 0:
+            continue
 
-    ages = np.array([(now - ts).total_seconds() / 3600.0 for ts, _ in filtered], dtype=float)
-    weights = np.array([exp(-age / 12.0) for age in ages], dtype=float)
+        delta = curr_fullness - prev_fullness
+        if delta < -12.0:
+            # Large drop usually means a bin empty event; do not treat it as negative fill.
+            continue
 
-    coeff = np.polyfit(x, y, deg=1, w=weights)
-    slope = float(coeff[0])
+        if delta <= 0:
+            continue
 
-    residuals = y - (coeff[0] * x + coeff[1])
-    variance = float(np.var(residuals)) if len(residuals) > 1 else 0.0
+        rate = min(delta / dt_hours, 35.0)
+        age_hours = (now - curr_ts).total_seconds() / 3600.0
+        weight = exp(-age_hours / 10.0)
+        weighted_rates.append((rate, weight))
 
-    return slope, variance
+    if not weighted_rates:
+        return None, None
+
+    weight_sum = sum(weight for _, weight in weighted_rates)
+    slope = sum(rate * weight for rate, weight in weighted_rates) / max(weight_sum, 1e-6)
+    variance = sum(weight * ((rate - slope) ** 2) for rate, weight in weighted_rates) / max(weight_sum, 1e-6)
+    return float(slope), float(variance)
 
 
 def predict_time_to_target(
@@ -70,7 +83,7 @@ def predict_time_to_target(
     bin_id: str,
     current_fullness: float | None,
     rows: list[dict[str, Any]],
-    target_fullness: float = 85.0,
+    target_fullness: float = 90.0,
 ) -> dict[str, Any]:
     if current_fullness is None:
         return {

@@ -16,7 +16,7 @@ export interface BinMeasurement {
 export interface FillTimeStat {
   group_key: string;
   count_cycles: number;
-  average_hours_to_85: number | null;
+  average_hours_to_target: number | null;
 }
 
 export interface FillTimeResponse {

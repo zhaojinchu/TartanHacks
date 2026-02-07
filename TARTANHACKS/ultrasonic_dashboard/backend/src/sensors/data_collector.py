@@ -43,7 +43,7 @@ class DataCollector:
         self.on_measurement = on_measurement
         self._running = False
         self._readers: dict[str, UltrasonicReader] = {
-            item.id: build_reader(item, mock_mode=self.config.sensors.mock_mode)
+            item.id: build_reader(item, runtime=self.config.sensors)
             for item in self.config.bins
         }
 
@@ -110,3 +110,11 @@ class DataCollector:
         self._running = False
         for reader in self._readers.values():
             await asyncio.to_thread(reader.close)
+
+    async def send_serial_command(self, command: str) -> bool:
+        for reader in self._readers.values():
+            send_method = getattr(reader, "send_command", None)
+            if callable(send_method):
+                await asyncio.to_thread(send_method, command)
+                return True
+        return False

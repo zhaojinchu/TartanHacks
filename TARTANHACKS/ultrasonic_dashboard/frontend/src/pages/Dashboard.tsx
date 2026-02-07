@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { LiveGrid } from "../components/LiveGrid";
+import { prettyBinNameFromType } from "../services/presentation";
 import { getBins, markBinEmpty } from "../services/api";
 import { BinWebSocketClient } from "../services/websocket";
 import type { BinMeasurement } from "../types";
@@ -51,7 +52,7 @@ export function Dashboard(): JSX.Element {
   }, []);
 
   const alerts = useMemo(
-    () => bins.filter((bin) => (bin.fullness_percent ?? 0) >= 85).sort((a, b) => (b.fullness_percent ?? 0) - (a.fullness_percent ?? 0)),
+    () => bins.filter((bin) => (bin.fullness_percent ?? 0) >= 90).sort((a, b) => (b.fullness_percent ?? 0) - (a.fullness_percent ?? 0)),
     [bins]
   );
 
@@ -78,7 +79,7 @@ export function Dashboard(): JSX.Element {
           <div className="alert-list">
             {alerts.map((bin) => (
               <div className="alert-chip" key={bin.bin_id}>
-                {bin.bin_id}: {bin.fullness_percent?.toFixed(1)}%
+                {prettyBinNameFromType(bin.bin_type)}: {bin.fullness_percent?.toFixed(1)}%
               </div>
             ))}
           </div>

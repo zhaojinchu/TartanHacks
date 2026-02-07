@@ -1,4 +1,5 @@
 import type { BinMeasurement } from "../types";
+import { formatDateTimeMinutes, prettyBinNameFromType } from "../services/presentation";
 
 interface Props {
   bin: BinMeasurement;
@@ -30,13 +31,14 @@ export function BinCard({ bin, onEmpty }: Props): JSX.Element {
   const progressStyle = {
     background: `conic-gradient(var(--accent) ${Math.round(fullness * 3.6)}deg, rgba(255,255,255,0.1) 0deg)`
   };
+  const displayName = prettyBinNameFromType(bin.bin_type);
 
   return (
     <article className="bin-card">
       <header className="bin-card-head">
         <div>
-          <h3>{bin.bin_id}</h3>
-          <p>{bin.bin_type.toUpperCase()}</p>
+          <h3>{displayName}</h3>
+          <p>{bin.location}</p>
         </div>
         <span className={`status-pill ${statusTone(bin.status)}`}>{statusLabels[bin.status]}</span>
       </header>
@@ -58,7 +60,7 @@ export function BinCard({ bin, onEmpty }: Props): JSX.Element {
         </div>
         <div>
           <dt>Last Update</dt>
-          <dd>{new Date(bin.timestamp).toLocaleString()}</dd>
+          <dd>{formatDateTimeMinutes(bin.timestamp)}</dd>
         </div>
       </dl>
 

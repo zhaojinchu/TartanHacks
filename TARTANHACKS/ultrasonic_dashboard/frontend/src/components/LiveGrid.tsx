@@ -39,8 +39,8 @@ export function LiveGrid({ bins, onEmpty }: Props): JSX.Element {
           Type
           <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
             <option value="all">All</option>
-            <option value="recycle">Recycle</option>
-            <option value="compost">Compost</option>
+            <option value="recycle">Bottles / Cans</option>
+            <option value="compost">Compostables</option>
             <option value="landfill">Landfill</option>
           </select>
         </label>

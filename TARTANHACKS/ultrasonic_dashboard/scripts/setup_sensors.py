@@ -15,11 +15,11 @@ from src.sensors.ultrasonic import SensorReadError, build_reader
 
 def main() -> None:
     config = load_config(ROOT / "config")
-    print(f"Loaded {len(config.bins)} bins (mock_mode={config.sensors.mock_mode})")
+    print(f"Loaded {len(config.bins)} bins (mode={config.sensors.mode})")
 
     for bin_cfg in config.bins:
         print(f"\nTesting {bin_cfg.id} [{bin_cfg.type}] @ {bin_cfg.location}")
-        reader = build_reader(bin_cfg, mock_mode=config.sensors.mock_mode)
+        reader = build_reader(bin_cfg, runtime=config.sensors)
         samples: list[float] = []
 
         try:

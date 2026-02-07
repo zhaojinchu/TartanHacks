@@ -1,5 +1,5 @@
 # Dataset config - Updated for TartanHacks v1 (9 classes)
-path: dataset
+path: /Users/zhaojin/Projects/TartanHacks/waste_sorter_hackathon/dataset
 train: train/images
 val: valid/images
 test: test/images

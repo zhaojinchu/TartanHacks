@@ -1,35 +1,30 @@
 bins:
-  - id: recycle_1
+  - id: bottles-cans
     type: recycle
-    location: Building_A_Floor_1
-    height_cm: 80
+    location: La Prima 1
+    height_cm: 82
     sensor_offset_cm: 5
     gpio_trigger: 23
     gpio_echo: 24
+    sensor_channel: 1
 
-  - id: compost_1
+  - id: compostables
     type: compost
-    location: Building_A_Floor_1
-    height_cm: 75
+    location: La Prima 2
+    height_cm: 78
     sensor_offset_cm: 4
     gpio_trigger: 17
     gpio_echo: 27
+    sensor_channel: 2
 
-  - id: landfill_1
+  - id: landfill
     type: landfill
-    location: Building_A_Floor_2
-    height_cm: 85
+    location: La Prima 3
+    height_cm: 86
     sensor_offset_cm: 5
     gpio_trigger: 5
     gpio_echo: 6
-
-  - id: recycle_2
-    type: recycle
-    location: Building_B_Floor_1
-    height_cm: 90
-    sensor_offset_cm: 6
-    gpio_trigger: 22
-    gpio_echo: 10
+    sensor_channel: 3
 
 measurement:
   interval_seconds: 5

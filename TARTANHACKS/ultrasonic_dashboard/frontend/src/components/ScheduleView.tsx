@@ -1,4 +1,5 @@
 import type { ScheduleItem } from "../types";
+import { formatDateTimeMinutes, prettyBinNameFromId } from "../services/presentation";
 
 interface Props {
   route: ScheduleItem[];
@@ -8,9 +9,9 @@ function downloadCsv(route: ScheduleItem[]): void {
   const header = ["priority", "bin_id", "location", "predicted_full_at", "eta_window"];
   const rows = route.map((item) => [
     item.priority,
-    item.bin_id,
+    prettyBinNameFromId(item.bin_id),
     item.location,
-    item.predicted_full_at ?? "",
+    formatDateTimeMinutes(item.predicted_full_at),
     item.eta_window
   ]);
 
@@ -34,9 +35,9 @@ function exportPdf(route: ScheduleItem[]): void {
       (item) =>
         `<tr>
           <td>${item.priority}</td>
-          <td>${item.bin_id}</td>
+          <td>${prettyBinNameFromId(item.bin_id)}</td>
           <td>${item.location}</td>
-          <td>${item.predicted_full_at ? new Date(item.predicted_full_at).toLocaleString() : "N/A"}</td>
+          <td>${formatDateTimeMinutes(item.predicted_full_at)}</td>
           <td>${item.eta_window}</td>
         </tr>`
     )
@@ -105,9 +106,9 @@ export function ScheduleView({ route }: Props): JSX.Element {
             {route.map((item) => (
               <tr key={`${item.bin_id}-${item.priority}`}>
                 <td>{item.priority}</td>
-                <td>{item.bin_id}</td>
+                <td>{prettyBinNameFromId(item.bin_id)}</td>
                 <td>{item.location}</td>
-                <td>{item.predicted_full_at ? new Date(item.predicted_full_at).toLocaleString() : "N/A"}</td>
+                <td>{formatDateTimeMinutes(item.predicted_full_at)}</td>
                 <td>{item.eta_window}</td>
               </tr>
             ))}

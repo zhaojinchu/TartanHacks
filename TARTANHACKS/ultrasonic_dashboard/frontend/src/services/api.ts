@@ -36,7 +36,7 @@ export function getBinHistory(binId: string, days = 7): Promise<{ items: BinMeas
   return request(`/api/bins/${binId}/history?start=${encodeURIComponent(start)}&limit=2000`);
 }
 
-export function getPrediction(binId: string, targetFullness = 85): Promise<BinPrediction> {
+export function getPrediction(binId: string, targetFullness = 90): Promise<BinPrediction> {
   return request(`/api/bins/${binId}/prediction?target_fullness=${targetFullness}`);
 }
 
@@ -52,7 +52,7 @@ export function getHeatmap(mode: "temporal" | "location", days = 30): Promise<He
   return request(`/api/analytics/heatmap?mode=${mode}&days=${days}`);
 }
 
-export function getSchedule(targetFullness = 85): Promise<ScheduleResponse> {
+export function getSchedule(targetFullness = 90): Promise<ScheduleResponse> {
   return request(`/api/schedule/optimize?target_fullness=${targetFullness}`);
 }
 

@@ -9,13 +9,14 @@ def _parse_ts(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
 
 
-def calculate_fill_cycles(rows: list[dict[str, Any]], *, target_fullness: float = 85.0) -> list[float]:
+def calculate_fill_cycles(rows: list[dict[str, Any]], *, target_fullness: float = 90.0) -> list[float]:
     if not rows:
         return []
 
     points = sorted(rows, key=lambda item: item["timestamp"])
     start_ts: datetime | None = None
     previous_fullness: float | None = None
+    target_crossed = False
     cycle_hours: list[float] = []
 
     for row in points:
@@ -26,13 +27,23 @@ def calculate_fill_cycles(rows: list[dict[str, Any]], *, target_fullness: float 
 
         if start_ts is None:
             start_ts = ts
-        elif previous_fullness is not None and fullness < previous_fullness - 25:
+        elif previous_fullness is not None and fullness < previous_fullness - 20:
             start_ts = ts
+            target_crossed = False
 
-        if fullness >= target_fullness and start_ts is not None:
+        crossed_up = (
+            previous_fullness is not None
+            and previous_fullness < target_fullness
+            and fullness >= target_fullness
+        )
+        if start_ts is not None and not target_crossed and crossed_up:
             hours = max((ts - start_ts).total_seconds() / 3600.0, 0.0)
-            cycle_hours.append(hours)
-            start_ts = ts
+            if hours >= 0.25:
+                cycle_hours.append(hours)
+            target_crossed = True
+
+        if fullness <= target_fullness - 15:
+            target_crossed = False
 
         previous_fullness = fullness
 
@@ -43,7 +54,7 @@ def average_fill_time_by_group(
     rows: list[dict[str, Any]],
     *,
     group_field: str,
-    target_fullness: float = 85.0,
+    target_fullness: float = 90.0,
 ) -> list[dict[str, Any]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -58,7 +69,7 @@ def average_fill_time_by_group(
             {
                 "group_key": key,
                 "count_cycles": len(cycles),
-                "average_hours_to_85": avg,
+                "average_hours_to_target": avg,
             }
         )
 

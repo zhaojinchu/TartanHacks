@@ -19,7 +19,7 @@ DEFAULT_CLASS_NAMES: list[str] = [
     "utensil",
 ]
 
-VALID_BINS: set[str] = {"recycle", "compost", "landfill"}
+VALID_BINS: set[str] = {"bottles", "compost", "landfill"}
 
 
 def load_yaml(path: str | Path) -> dict[str, Any]:

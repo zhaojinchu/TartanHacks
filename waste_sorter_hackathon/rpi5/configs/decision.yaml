@@ -2,17 +2,17 @@ unknown_threshold: 0.60
 window_size: 5
 
 bins:
-  recycle:
-    - lp_cup_lids
+  bottles:
     - lp_plastic_cup
-    - rigid_plastic_container
-    - rigid_plastic_lid
-    - small_plastic_container
 
   compost:
     - lp_paper_cup
     - napkin
-
-  landfill:
     - straw
     - utensil
+    - lp_cup_lids
+
+  landfill:
+    - small_plastic_container
+    - rigid_plastic_container
+    - rigid_plastic_lid

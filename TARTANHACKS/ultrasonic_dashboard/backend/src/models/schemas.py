@@ -34,7 +34,7 @@ class BinHistoryResponse(BaseModel):
 class FillTimeStat(BaseModel):
     group_key: str
     count_cycles: int
-    average_hours_to_85: float | None
+    average_hours_to_target: float | None
 
 
 class FillRateTrendPoint(BaseModel):
@@ -51,7 +51,7 @@ class HeatmapCell(BaseModel):
 
 class BinPrediction(BaseModel):
     bin_id: str
-    target_fullness: float = Field(default=85.0)
+    target_fullness: float = Field(default=90.0)
     current_fullness: float | None
     predicted_full_at: datetime | None
     hours_to_target: float | None
@@ -78,3 +78,7 @@ class ScheduleResponse(BaseModel):
 
 class EmptyBinRequest(BaseModel):
     reason: str = "manual_override"
+
+
+class ArduinoCommandRequest(BaseModel):
+    command: str = Field(description="Arduino command, e.g. O0, C1")

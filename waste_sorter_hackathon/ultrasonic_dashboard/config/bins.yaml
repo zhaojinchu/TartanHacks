@@ -3,8 +3,8 @@
 
 bins:
   # Example Recycle Bin
-  - id: "recycle_1"
-    type: "recycle"
+  - id: "bottles_1"
+    type: "bottles"
     location: "Building_A_Floor_1_Hallway"
     description: "Main recycling bin near entrance"
     height_cm: 80              # Internal height of bin from bottom to top

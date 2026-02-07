@@ -12,6 +12,7 @@ import {
   YAxis
 } from "recharts";
 
+import { prettyGroupKey } from "../services/presentation";
 import { getFillRateTrends, getFillTimes } from "../services/api";
 import type { FillRateTrendPoint, FillTimeResponse } from "../types";
 
@@ -30,8 +31,8 @@ export function Analytics(): JSX.Element {
   const barData = useMemo(
     () =>
       fillTimes?.by_bin_type.map((item) => ({
-        group: item.group_key,
-        average_hours_to_85: item.average_hours_to_85 ?? 0
+        group: prettyGroupKey(item.group_key),
+        average_hours_to_target: item.average_hours_to_target ?? 0
       })) ?? [],
     [fillTimes]
   );
@@ -51,7 +52,7 @@ export function Analytics(): JSX.Element {
       </section>
 
       <section className="panel">
-        <h2>Average Time to 85% Full (Hours)</h2>
+        <h2>Average Time to 90% Full (Hours)</h2>
         <div className="chart-wrap">
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={barData}>
@@ -59,7 +60,7 @@ export function Analytics(): JSX.Element {
               <XAxis dataKey="group" />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="average_hours_to_85" fill="#0ea5e9" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="average_hours_to_target" fill="#0ea5e9" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

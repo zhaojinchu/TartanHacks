@@ -8,10 +8,18 @@ from typing import Any
 import yaml
 
 CLASS_NAMES: list[str] = [
+    "lp_cup_lids",
+    "lp_paper_cup",
+    "lp_plastic_cup",
+    "napkin",
     "rigid_plastic_container",
+    "rigid_plastic_lid",
+    "small_plastic_container",
+    "straw",
+    "utensil",
 ]
 
-VALID_BINS: set[str] = {"recycle", "compost", "landfill"}
+VALID_BINS: set[str] = {"bottles", "compost", "landfill"}
 
 
 def load_yaml(path: str | Path) -> dict[str, Any]:

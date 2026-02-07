@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -12,9 +13,10 @@ from src.analytics.statistics import (
     location_heatmap,
     temporal_heatmap,
 )
-from src.models.schemas import BinMeasurement, EmptyBinRequest, ScheduleResponse
+from src.models.schemas import ArduinoCommandRequest, BinMeasurement, EmptyBinRequest, ScheduleResponse
 
 router = APIRouter(prefix="/api")
+ARDUINO_COMMAND_PATTERN = re.compile(r"^[OC][0-2]$")
 
 
 def _to_datetime(value: str | None) -> datetime | None:
@@ -116,7 +118,7 @@ async def get_history(
 async def get_prediction(
     bin_id: str,
     request: Request,
-    target_fullness: float = Query(default=85.0, ge=10, le=100),
+    target_fullness: float = Query(default=90.0, ge=10, le=100),
 ) -> dict[str, Any]:
     db = request.app.state.db
     lookup = _bin_lookup(request)
@@ -152,11 +154,11 @@ async def get_prediction(
 async def analytics_fill_times(
     request: Request,
     days: int = Query(default=30, ge=1, le=3650),
-    target_fullness: float = Query(default=85.0, ge=10, le=100),
+    target_fullness: float = Query(default=90.0, ge=10, le=100),
 ) -> dict[str, Any]:
     db = request.app.state.db
     start = datetime.now(tz=UTC) - timedelta(days=days)
-    rows = db.get_all_history(start=start)
+    rows = db.get_all_history(start=start, bin_ids=[item.id for item in request.app.state.config.bins])
 
     return {
         "by_bin_type": average_fill_time_by_group(rows, group_field="bin_type", target_fullness=target_fullness),
@@ -172,7 +174,7 @@ async def analytics_fill_rate_trends(
 ) -> list[dict[str, Any]]:
     db = request.app.state.db
     start = datetime.now(tz=UTC) - timedelta(days=days)
-    rows = db.get_all_history(start=start)
+    rows = db.get_all_history(start=start, bin_ids=[item.id for item in request.app.state.config.bins])
     return fill_rate_trends(rows)
 
 
@@ -184,7 +186,7 @@ async def analytics_heatmap(
 ) -> dict[str, Any]:
     db = request.app.state.db
     start = datetime.now(tz=UTC) - timedelta(days=days)
-    rows = db.get_all_history(start=start)
+    rows = db.get_all_history(start=start, bin_ids=[item.id for item in request.app.state.config.bins])
 
     data = temporal_heatmap(rows) if mode == "temporal" else location_heatmap(rows)
     return {"mode": mode, "window_days": days, "cells": data}
@@ -193,7 +195,7 @@ async def analytics_heatmap(
 @router.get("/schedule/optimize", response_model=ScheduleResponse)
 async def schedule_optimize(
     request: Request,
-    target_fullness: float = Query(default=85.0, ge=10, le=100),
+    target_fullness: float = Query(default=90.0, ge=10, le=100),
 ) -> ScheduleResponse:
     db = request.app.state.db
     bins = request.app.state.config.bins
@@ -261,3 +263,22 @@ async def mark_empty(bin_id: str, request: Request, payload: EmptyBinRequest) ->
     await manager.broadcast({"type": "measurement", "data": measurement.model_dump(mode="json")})
 
     return {"ok": True, "bin_id": bin_id, "reason": payload.reason}
+
+
+@router.post("/arduino/command")
+async def send_arduino_command(request: Request, payload: ArduinoCommandRequest) -> dict[str, Any]:
+    command = payload.command.strip().upper()
+    if not command:
+        raise HTTPException(status_code=400, detail="Command cannot be empty")
+    if not ARDUINO_COMMAND_PATTERN.fullmatch(command):
+        raise HTTPException(status_code=400, detail="Invalid command. Use O0/C0/O1/C1/O2/C2.")
+
+    collector = request.app.state.collector
+    sent = await collector.send_serial_command(command)
+    if not sent:
+        raise HTTPException(
+            status_code=400,
+            detail="No serial reader active. Set sensors.mode=serial and restart backend.",
+        )
+
+    return {"ok": True, "command": command}

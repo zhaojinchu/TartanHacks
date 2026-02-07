@@ -7,7 +7,7 @@ This implementation is in:
 - `TARTANHACKS/ultrasonic_dashboard`
 
 ## Features
-- Real-time sensor collection from multiple bins (GPIO or mock mode)
+- Real-time sensor collection from multiple bins (serial, GPIO, or mock mode)
 - Fullness calculations with configurable bin dimensions
 - SQLite time-series storage
 - REST API + WebSocket streaming updates
@@ -100,7 +100,7 @@ Defines bins and collection timing.
 
 ### `config/sensors.yaml`
 Runtime behavior and DB path.
-- Set `mock_mode: false` for real GPIO reads on Raspberry Pi.
+- Set `mode: serial` for Arduino-over-USB, `mode: gpio` for direct Pi GPIO, or `mode: mock` for development.
 
 ### `config/thresholds.yaml`
 Status and alert thresholds.
@@ -116,6 +116,7 @@ Status and alert thresholds.
 - `GET /api/analytics/heatmap?mode=temporal|location`
 - `GET /api/analytics/prediction-accuracy`
 - `GET /api/schedule/optimize`
+- `POST /api/arduino/command` (payload `{"command":"O0"}` etc.)
 - `WS /ws/bins`
 
 ## Scripts
@@ -138,7 +139,10 @@ python scripts/calibrate_bins.py
 
 ## Raspberry Pi Notes
 - HC-SR04 Echo pin is 5V; use a resistor divider before Pi GPIO input.
-- For hardware mode set `mock_mode: false` in `config/sensors.yaml`.
+- For serial mode, wire sensors to Arduino and connect Arduino USB to Pi (`/dev/ttyACM0` by default).
+- Set `mode: serial` in `config/sensors.yaml` and map each bin `sensor_channel` in `config/bins.yaml`.
+- If using direct Pi GPIO instead, set `mode: gpio` in `config/sensors.yaml`.
+- With verbose Arduino serial logs, prefer `115200` baud and slower publish intervals (about 200-500ms).
 - Install service:
 ```bash
 sudo cp systemd/ultrasonic-dashboard.service /etc/systemd/system/

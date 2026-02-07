@@ -299,6 +299,8 @@ python3.11 scripts/export_onnx.py \
 scp runs_hack/baseline/weights/best.onnx \
   zhaojin@<PI_IP>:~/Projects/TartanHacks/waste_sorter_hackathon/rpi5/models/waste_sorter.onnx
 
+cp /Users/zhaojin/Projects/TartanHacks/waste_sorter_hackathon/runs_hack/baseline/weights/best.onnx rpi5/models/waste_sorter.onnx
+
 # 4) Pi setup (on Raspberry Pi)
 cd ~/Projects/TartanHacks/waste_sorter_hackathon
 python3 -m venv .venv --system-site-packages

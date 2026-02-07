@@ -174,7 +174,7 @@ python scripts/infer_video.py \
 
 ### 10) Inference on webcam
 ```bash
-python scripts/infer_webcam.py \
+python waste_sorter_hackathon/scripts/infer_webcam.py \
   --weights runs_hack/baseline/weights/best.pt \
   --conf 0.25 \
   --iou 0.45

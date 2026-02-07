@@ -262,6 +262,33 @@ python scripts/run_realtime.py --model models/waste_sorter.onnx --camera_backend
    - 1-class prototype model detects only one class
    - 8-class model required for full sorter behavior
 
+## Pi Camera Blue Tint Fix
+If whites look blue or skin tones look wrong, test these in order:
+
+1) Try BGR camera format:
+```bash
+python scripts/run_realtime.py \
+  --model models/waste_sorter.onnx \
+  --camera_backend picamera2 \
+  --picam_format BGR888 \
+  --no_display
+```
+
+2) Keep AWB enabled and avoid pointing directly at bright lights.
+
+3) If color is still unstable, set manual colour gains:
+```bash
+python scripts/run_realtime.py \
+  --model models/waste_sorter.onnx \
+  --camera_backend picamera2 \
+  --picam_format BGR888 \
+  --no-awb \
+  --colour_gains 1.6 1.2 \
+  --no_display
+```
+
+Note: very bright overhead light in frame can skew auto white balance and exposure.
+
 Check for throttling/undervoltage after reboot:
 ```bash
 vcgencmd get_throttled

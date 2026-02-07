@@ -186,7 +186,16 @@ class OpenCVCamera:
 class PiCamera2Source:
     """Picamera2-based source for Raspberry Pi Camera Module 2/3 via libcamera."""
 
-    def __init__(self, camera_index: int, width: int, height: int, fps: float) -> None:
+    def __init__(
+        self,
+        camera_index: int,
+        width: int,
+        height: int,
+        fps: float,
+        pixel_format: str = "RGB888",
+        awb: bool = True,
+        colour_gains: tuple[float, float] | None = None,
+    ) -> None:
         try:
             from picamera2 import Picamera2
         except ImportError as exc:
@@ -199,20 +208,29 @@ class PiCamera2Source:
         self.width = width
         self.height = height
         self.fps = fps if fps > 0 else 30.0
+        self.pixel_format = pixel_format
 
         self.picam2 = Picamera2(camera_index)
         controls: dict[str, Any] = {}
         if self.fps > 0:
             controls["FrameRate"] = float(self.fps)
+        controls["AwbEnable"] = bool(awb)
+        if colour_gains is not None:
+            controls["AwbEnable"] = False
+            controls["ColourGains"] = (float(colour_gains[0]), float(colour_gains[1]))
 
         config = self.picam2.create_preview_configuration(
-            # Use RGB888 and convert to BGR explicitly to avoid blue/red channel swaps.
-            main={"format": "RGB888", "size": (self.width, self.height)},
+            main={"format": self.pixel_format, "size": (self.width, self.height)},
             controls=controls,
         )
         self.picam2.configure(config)
         self.picam2.start()
         time.sleep(0.2)
+        print(
+            "PiCamera2 config: "
+            f"format={self.pixel_format} awb={controls.get('AwbEnable')} "
+            f"colour_gains={controls.get('ColourGains')}"
+        )
 
     def read(self) -> tuple[bool, Any]:
         frame = self.picam2.capture_array()
@@ -222,9 +240,15 @@ class PiCamera2Source:
         if frame.ndim == 2:
             frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
         elif frame.ndim == 3 and frame.shape[2] == 3:
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            if self.pixel_format == "RGB888":
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            elif self.pixel_format == "BGR888":
+                pass
+            else:
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         elif frame.ndim == 3 and frame.shape[2] == 4:
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
+            # Fallback for 4-channel formats.
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
 
         return True, frame
 
@@ -273,6 +297,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
     parser.add_argument("--camera_fps", type=float, default=30.0)
+    parser.add_argument(
+        "--picam_format",
+        type=str,
+        default="RGB888",
+        choices=["RGB888", "BGR888"],
+        help="Pi camera pixel format. If colors are blue/red swapped, try BGR888.",
+    )
+    parser.add_argument(
+        "--awb",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable auto white balance for Pi camera.",
+    )
+    parser.add_argument(
+        "--colour_gains",
+        nargs=2,
+        type=float,
+        default=None,
+        metavar=("R_GAIN", "B_GAIN"),
+        help="Manual colour gains (disables AWB), e.g. --colour_gains 1.6 1.2",
+    )
     parser.add_argument("--imgsz", type=int, default=512)
     parser.add_argument("--conf", type=float, default=0.25)
     parser.add_argument("--iou", type=float, default=0.45)
@@ -366,6 +411,9 @@ def open_camera_source(args: argparse.Namespace) -> tuple[Any, str]:
                 width=args.width,
                 height=args.height,
                 fps=args.camera_fps,
+                pixel_format=args.picam_format,
+                awb=args.awb,
+                colour_gains=tuple(args.colour_gains) if args.colour_gains else None,
             )
             return source, "picamera2"
         except Exception as exc:

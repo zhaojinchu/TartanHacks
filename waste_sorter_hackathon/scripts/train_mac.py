@@ -24,7 +24,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--epochs", type=int, default=80)
-    parser.add_argument("--batch", type=int, default=32)
+    parser.add_argument("--batch", type=int, default=16)
     parser.add_argument("--project", type=str, default="runs_hack")
     parser.add_argument("--name", type=str, default="mac_medium")
     parser.add_argument("--device", type=str, default="auto")

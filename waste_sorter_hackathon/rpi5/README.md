@@ -218,17 +218,18 @@ If top smoothed class score is below threshold (`unknown_threshold`), output bec
 - `final_bin = landfill`
 - `reason = unknown_low_conf`
 
-Otherwise top class maps to bin (`recycle`, `compost`, `landfill`) via `configs/decision.yaml`.
+Otherwise top class maps to bin (`bottles`, `compost`, `landfill`) via `configs/decision.yaml`.
 
 ## Locked classes (must match training/export)
-0 `aluminum_can`
-1 `plastic_bottle`
-2 `lp_paper_cup`
-3 `lp_plastic_cup`
+0 `lp_cup_lids`
+1 `lp_paper_cup`
+2 `lp_plastic_cup`
+3 `napkin`
 4 `rigid_plastic_container`
-5 `straw`
-6 `utensil`
-7 `napkin`
+5 `rigid_plastic_lid`
+6 `small_plastic_container`
+7 `straw`
+8 `utensil`
 
 ## Notes for Pi performance
 - Start with `--imgsz 512`; reduce to `384` if FPS is too low.
@@ -283,7 +284,7 @@ python scripts/run_realtime.py --model models/waste_sorter.onnx --camera_backend
 3. Ensure object is large and centered in frame.
 4. Confirm ONNX model matches your current training stage:
    - 1-class prototype model detects only one class
-   - 8-class model required for full sorter behavior
+   - 9-class model required for full sorter behavior
 
 ## Pi Camera Blue Tint Fix
 If whites look blue or skin tones look wrong, test these in order:

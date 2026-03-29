@@ -193,7 +193,7 @@ class ONNXWasteDetector:
             raise ValueError(
                 "Model output appears to be single-class ([cx,cy,w,h,score]) but runtime "
                 f"is configured for {len(self.class_names)} classes. "
-                "Use an 8-class ONNX model or align runtime class names."
+                "Use a 9-class ONNX model or align runtime class names."
             )
 
         raw_boxes = pred[:, :4].astype(np.float32)

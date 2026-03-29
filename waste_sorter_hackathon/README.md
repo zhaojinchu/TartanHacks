@@ -33,14 +33,15 @@ Think of the system as 4 simple stages.
 ## Locked Class Contract (Do Not Change Order)
 Your labels must use this exact order:
 
-0 `aluminum_can`
-1 `plastic_bottle`
-2 `lp_paper_cup`
-3 `lp_plastic_cup`
+0 `lp_cup_lids`
+1 `lp_paper_cup`
+2 `lp_plastic_cup`
+3 `napkin`
 4 `rigid_plastic_container`
-5 `straw`
-6 `utensil`
-7 `napkin`
+5 `rigid_plastic_lid`
+6 `small_plastic_container`
+7 `straw`
+8 `utensil`
 
 Rules:
 - no `food_scrap` class
@@ -109,7 +110,7 @@ python scripts/dedupe_frames.py \
 
 ### 3) Label in Roboflow
 - Upload `data/frames_deduped`
-- Annotate with the exact 8 classes above, in that order
+- Annotate with the exact 9 classes above, in that order
 - Export YOLO format
 - Put flat exports (image + matching `.txt`) in `data/flat_labeled`
 
@@ -126,7 +127,7 @@ python scripts/split_dataset.py \
 python scripts/sanity_check_labels.py \
   --images_dir dataset/images \
   --labels_dir dataset/labels \
-  --num_classes 8
+  --num_classes 9
 ```
 
 ### 6) Train model
@@ -214,7 +215,7 @@ python scripts/route_demo.py \
 Configured in `configs/decision.yaml`:
 - `window_size`: smoothing window (default `5`)
 - `unknown_threshold`: fallback threshold (default `0.60`)
-- class-to-bin mapping (`recycle`, `compost`, `landfill`)
+- class-to-bin mapping (`bottles`, `compost`, `landfill`)
 
 Runtime behavior per frame:
 1. Collect `(class_id, confidence)` detections.
@@ -232,7 +233,7 @@ Returned structure:
   "top_class": "...",
   "score": 0.0,
   "reason": "mapped_from_class | unknown_low_conf",
-  "per_class_scores": {"aluminum_can": 0.12, ...}
+  "per_class_scores": {"lp_cup_lids": 0.12, ...}
 }
 ```
 
@@ -262,7 +263,7 @@ Run:
 ```bash
 python scripts/sanity_check_labels.py --images_dir dataset/images --labels_dir dataset/labels
 ```
-Fix class IDs outside `[0..7]`, bad normalized values, or missing image/label pairs.
+Fix class IDs outside `[0..8]`, bad normalized values, or missing image/label pairs.
 
 ### Roboflow class order mismatch
 - `configs/data.yaml` must match annotation order exactly.

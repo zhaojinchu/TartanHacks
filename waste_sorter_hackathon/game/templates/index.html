@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>REBIN – Waste Sorting Challenge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d1117;
+      color: #fff;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    #header {
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #21262d;
+      flex-shrink: 0;
+    }
+    #logo {
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: #58d68d;
+    }
+    #logo span { color: #fff; }
+    #phase-badge {
+      font-size: 13px;
+      padding: 4px 14px;
+      border-radius: 20px;
+      background: #21262d;
+      color: #8b949e;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    #btn-reset {
+      background: #21262d;
+      color: #8b949e;
+      border: 1px solid #30363d;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #btn-reset:hover { background: #30363d; color: #fff; }
+
+    /* ── Main container ─────────────────────────────────────────── */
+    #main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .phase {
+      display: none;
+      width: 100%;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── SCANNING ───────────────────────────────────────────────── */
+    #phase-scanning {
+      flex-direction: column;
+      gap: 14px;
+    }
+    #live-feed {
+      max-height: 70vh;
+      max-width: 88vw;
+      border-radius: 12px;
+      border: 2px solid #21262d;
+      display: block;
+    }
+    #scan-hint {
+      font-size: 20px;
+      color: #58d68d;
+      letter-spacing: 1px;
+      text-align: center;
+    }
+    #progress-wrap {
+      width: 340px;
+      height: 8px;
+      background: #21262d;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #58d68d, #1abc9c);
+      border-radius: 4px;
+      transition: width 0.2s ease;
+    }
+
+    /* ── DETECTED ───────────────────────────────────────────────── */
+    #phase-detected {
+      flex-direction: column;
+      gap: 22px;
+    }
+    #frozen-detected {
+      max-height: 50vh;
+      max-width: 65vw;
+      border-radius: 12px;
+      border: 3px solid #58d68d;
+      display: block;
+    }
+    #detected-prompt {
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+      text-align: center;
+    }
+    #bin-buttons {
+      display: flex;
+      gap: 18px;
+    }
+    .bin-btn {
+      width: 200px;
+      height: 100px;
+      border: none;
+      border-radius: 16px;
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: transform 0.12s, filter 0.12s;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    }
+    .bin-btn:hover  { transform: scale(1.07); filter: brightness(1.2); }
+    .bin-btn:active { transform: scale(0.97); }
+    .bin-btn .icon  { font-size: 30px; }
+
+    /* ── PLAYER_CHOSE ────────────────────────────────────────────── */
+    #phase-player_chose {
+      flex-direction: column;
+      gap: 18px;
+    }
+    .split-row {
+      display: flex;
+      gap: 20px;
+      flex: 1;
+      width: 100%;
+      padding: 0 20px;
+      max-height: 72vh;
+    }
+    .panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      background: #161b22;
+      border-radius: 16px;
+      padding: 20px;
+      border: 1px solid #21262d;
+    }
+    .panel h2 {
+      font-size: 16px;
+      color: #8b949e;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    .panel-img {
+      max-height: 38vh;
+      max-width: 100%;
+      border-radius: 10px;
+      object-fit: contain;
+    }
+    .answer-badge {
+      font-size: 24px;
+      font-weight: 900;
+      padding: 12px 28px;
+      border-radius: 12px;
+      color: #fff;
+      text-align: center;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    }
+    .mystery-box {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0d1117;
+      border-radius: 12px;
+      font-size: 80px;
+    }
+    #btn-reveal-ai {
+      padding: 16px 48px;
+      background: #f39c12;
+      color: #1a1a1a;
+      border: none;
+      border-radius: 12px;
+      font-size: 22px;
+      font-weight: 800;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: transform 0.1s, filter 0.1s;
+    }
+    #btn-reveal-ai:hover { filter: brightness(1.15); transform: scale(1.03); }
+
+    /* ── REVEAL ─────────────────────────────────────────────────── */
+    #phase-reveal {
+      flex-direction: column;
+      gap: 16px;
+    }
+    .ai-sub {
+      font-size: 13px;
+      color: #8b949e;
+      margin-top: -8px;
+    }
+    #reveal-actions {
+      display: flex;
+      gap: 14px;
+      padding-bottom: 8px;
+    }
+    .outcome-btn {
+      padding: 14px 26px;
+      border: none;
+      border-radius: 10px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s, filter 0.1s;
+    }
+    .outcome-btn:hover  { filter: brightness(1.15); transform: scale(1.03); }
+    .outcome-btn:active { transform: scale(0.97); }
+    #btn-prize  { background: #f1c40f; color: #1a1a1a; }
+    #btn-raffle { background: #27ae60; color: #fff; }
+    #btn-wrong  { background: #c0392b; color: #fff; }
+
+    /* ── RESULT ─────────────────────────────────────────────────── */
+    #phase-result {
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+    }
+
+    /* -- Win sub-view -- */
+    #result-win {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 22px;
+    }
+    #win-banner {
+      text-align: center;
+      padding: 28px 56px;
+      border-radius: 20px;
+      min-width: 480px;
+    }
+    #win-banner.prize  { background: linear-gradient(135deg, #7d6608, #b8860b); }
+    #win-banner.raffle { background: linear-gradient(135deg, #145a32, #1e8449); }
+    #win-icon    { font-size: 64px; }
+    #win-title   { font-size: 40px; font-weight: 900; margin-top: 10px; }
+    #win-sub     { font-size: 18px; margin-top: 8px; opacity: 0.88; }
+
+    #raffle-form {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 16px;
+      padding: 28px 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 420px;
+    }
+    #raffle-form h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #58d68d;
+      margin-bottom: 2px;
+    }
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .form-field label {
+      font-size: 13px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .form-field input {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 18px;
+      padding: 10px 14px;
+      outline: none;
+    }
+    .form-field input:focus { border-color: #58d68d; }
+    #btn-submit-raffle {
+      padding: 13px;
+      background: #58d68d;
+      color: #0d1117;
+      border: none;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: filter 0.1s;
+    }
+    #btn-submit-raffle:hover { filter: brightness(1.1); }
+    #raffle-thanks {
+      display: none;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 700;
+      color: #58d68d;
+      padding: 12px 0;
+    }
+
+    /* -- Lose sub-view -- */
+    #result-lose {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+    }
+    #lose-banner {
+      text-align: center;
+      padding: 40px 64px;
+      border-radius: 24px;
+      min-width: 480px;
+      background: linear-gradient(135deg, #1c1c2e, #2d2d44);
+      border: 2px solid #30363d;
+    }
+    #lose-icon     { font-size: 72px; }
+    #lose-title    { font-size: 42px; font-weight: 900; margin-top: 12px; color: #e74c3c; }
+    #lose-subtitle { font-size: 20px; margin-top: 10px; color: #8b949e; }
+
+    .btn-next {
+      padding: 16px 52px;
+      background: #58d68d;
+      color: #0d1117;
+      border: none;
+      border-radius: 12px;
+      font-size: 22px;
+      font-weight: 800;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: filter 0.1s;
+    }
+    .btn-next:hover { filter: brightness(1.1); }
+
+    /* ── Animations ─────────────────────────────────────────────── */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.45; }
+    }
+    .pulse { animation: pulse 1.6s ease-in-out infinite; }
+
+    @keyframes pop-in {
+      0%   { transform: scale(0.85); opacity: 0; }
+      100% { transform: scale(1);    opacity: 1; }
+    }
+    .pop-in { animation: pop-in 0.25s ease-out forwards; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="header">
+  <div id="logo">RE<span>BIN</span> ♻️</div>
+  <div id="phase-badge">Scanning</div>
+  <button id="btn-reset" onclick="nextRound()">↺ Reset</button>
+</div>
+
+<!-- Main -->
+<div id="main">
+
+  <!-- ── SCANNING ── -->
+  <div id="phase-scanning" class="phase">
+    <img id="live-feed" src="/video_feed" alt="Live camera" />
+  </div>
+
+  <!-- ── DETECTED ── -->
+  <div id="phase-detected" class="phase">
+    <img id="frozen-detected" src="" alt="Detected item" />
+    <div id="detected-prompt">Which bin does this belong in?</div>
+    <div id="bin-buttons">
+      {% for bin, label in bin_labels.items() %}
+      <button class="bin-btn"
+              style="background: {{ bin_colors[bin] }};"
+              onclick="playerAnswer('{{ bin }}')">
+        <span class="icon">{{ bin_icons[bin] }}</span>
+        {{ label }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── PLAYER CHOSE (left half visible, AI hidden) ── -->
+  <div id="phase-player_chose" class="phase" style="flex-direction:column; gap:16px;">
+    <div class="split-row">
+      <div class="panel pop-in">
+        <h2>👤 Your Answer</h2>
+        <img id="chose-img-player" class="panel-img" src="" alt="" />
+        <div id="chose-player-badge" class="answer-badge">—</div>
+      </div>
+      <div class="panel">
+        <h2>🤖 AI's Answer</h2>
+        <div class="mystery-box">?</div>
+      </div>
+    </div>
+    <button id="btn-reveal-ai" onclick="revealAI()">🤖 Reveal AI Answer</button>
+  </div>
+
+  <!-- ── REVEAL ── -->
+  <div id="phase-reveal" class="phase" style="flex-direction:column; gap:16px;">
+    <div class="split-row">
+      <div class="panel">
+        <h2>👤 Player's Answer</h2>
+        <img id="reveal-img-player" class="panel-img" src="" alt="" />
+        <div id="reveal-player-badge" class="answer-badge">—</div>
+      </div>
+      <div class="panel pop-in">
+        <h2>🤖 AI's Answer</h2>
+        <img id="reveal-img-ai" class="panel-img" src="" alt="" />
+        <div id="reveal-ai-badge" class="answer-badge">—</div>
+        <div id="reveal-ai-sub" class="ai-sub"></div>
+      </div>
+    </div>
+    <div id="reveal-actions">
+      <button id="btn-prize"  class="outcome-btn" onclick="setResult('prize')">
+        🏆 Prize + Raffle Entry
+      </button>
+      <button id="btn-raffle" class="outcome-btn" onclick="setResult('raffle')">
+        🎟️ Raffle Entry Only
+      </button>
+      <button id="btn-wrong"  class="outcome-btn" onclick="setResult('none')">
+        ✗ Player Was Wrong
+      </button>
+    </div>
+  </div>
+
+  <!-- ── RESULT ── -->
+  <div id="phase-result" class="phase">
+
+    <!-- Win: raffle entry form -->
+    <div id="result-win">
+      <div id="win-banner" class="pop-in">
+        <div id="win-icon">🏆</div>
+        <div id="win-title">You Win!</div>
+        <div id="win-sub">Fill in your details for the raffle</div>
+      </div>
+      <div id="raffle-form">
+        <h3>🎟️ Raffle Entry</h3>
+        <div class="form-field">
+          <label>Name</label>
+          <input id="raffle-name" type="text" placeholder="Your name" autocomplete="off" />
+        </div>
+        <div class="form-field">
+          <label>Email <span style="color:#8b949e;font-size:11px;">(optional)</span></label>
+          <input id="raffle-email" type="email" placeholder="you@example.com" autocomplete="off" />
+        </div>
+        <button id="btn-submit-raffle" onclick="submitRaffle()">Submit Entry ✓</button>
+        <div id="raffle-thanks">🎉 You're in the raffle — good luck!</div>
+      </div>
+      <button class="btn-next" onclick="nextRound()">Next Player →</button>
+    </div>
+
+    <!-- Lose: game over -->
+    <div id="result-lose">
+      <div id="lose-banner" class="pop-in">
+        <div id="lose-icon">😔</div>
+        <div id="lose-title">Not quite!</div>
+        <div id="lose-subtitle">Better luck next time — keep recycling!</div>
+      </div>
+      <button class="btn-next" onclick="nextRound()">Next Player →</button>
+    </div>
+
+  </div>
+
+</div><!-- #main -->
+
+<script>
+  const BIN_COLORS = {{ bin_colors | tojson }};
+  const BIN_LABELS = {{ bin_labels | tojson }};
+  const BIN_ICONS  = {{ bin_icons  | tojson }};
+
+  const PHASE_NAMES = {
+    scanning:     "Scanning",
+    detected:     "Item Detected!",
+    player_chose: "Player Answered",
+    reveal:       "Reveal",
+    result:       "Result",
+  };
+
+  let lastPhase     = null;
+  let cachedFrameB64 = null;
+
+  function showPhase(phase) {
+    document.querySelectorAll(".phase").forEach(el => el.style.display = "none");
+    const el = document.getElementById("phase-" + phase);
+    if (el) el.style.display = "flex";
+    document.getElementById("phase-badge").textContent = PHASE_NAMES[phase] || phase;
+  }
+
+  function badgeHTML(bin) {
+    if (!bin) return "—";
+    return (BIN_ICONS[bin] || "") + " " + (BIN_LABELS[bin] || bin);
+  }
+
+  function applyFrame(b64) {
+    if (!b64 || b64 === cachedFrameB64) return;
+    cachedFrameB64 = b64;
+    const src = "data:image/jpeg;base64," + b64;
+    ["frozen-detected",
+     "chose-img-player",
+     "reveal-img-player",
+     "reveal-img-ai"].forEach(id => {
+      const img = document.getElementById(id);
+      if (img) img.src = src;
+    });
+  }
+
+  function applyBadge(id, bin) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = badgeHTML(bin);
+    el.style.background = bin ? (BIN_COLORS[bin] || "#444") : "#333";
+  }
+
+  function updateState(state) {
+    // Frozen frame
+    applyFrame(state.frozen_frame_b64);
+
+    // Badges (always keep up to date so reveal phase looks right)
+    applyBadge("chose-player-badge",  state.player_bin);
+    applyBadge("reveal-player-badge", state.player_bin);
+    applyBadge("reveal-ai-badge",     state.ai_bin);
+
+    const aiSub = document.getElementById("reveal-ai-sub");
+    if (aiSub && state.ai_class) {
+      aiSub.textContent =
+        "Detected: " + state.ai_class + " (" +
+        Math.round((state.ai_score || 0) * 100) + "% confidence)";
+    }
+
+    // Phase switch
+    if (state.phase !== lastPhase) {
+      lastPhase = state.phase;
+      showPhase(state.phase);
+    }
+
+    // Result sub-views
+    if (state.phase === "result" && state.outcome) {
+      const win  = document.getElementById("result-win");
+      const lose = document.getElementById("result-lose");
+      if (state.outcome === "prize" || state.outcome === "raffle") {
+        win.style.display  = "flex";
+        lose.style.display = "none";
+        const banner = document.getElementById("win-banner");
+        banner.className = "pop-in " + state.outcome;
+        document.getElementById("win-icon").textContent =
+          state.outcome === "prize" ? "🏆" : "🎟️";
+        document.getElementById("win-title").textContent =
+          state.outcome === "prize" ? "YOU WIN A PRIZE!" : "Raffle Entry Earned!";
+        document.getElementById("win-sub").textContent =
+          state.outcome === "prize"
+            ? "Fill in your details — you beat the AI!"
+            : "Great sorting! Fill in your details below.";
+      } else {
+        win.style.display  = "none";
+        lose.style.display = "flex";
+      }
+    }
+  }
+
+  async function playerAnswer(bin) {
+    await fetch("/player_answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bin }),
+    });
+  }
+
+  async function revealAI() {
+    await fetch("/reveal_ai", { method: "POST" });
+  }
+
+  async function setResult(outcome) {
+    await fetch("/set_result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ outcome }),
+    });
+  }
+
+  async function submitRaffle() {
+    const name  = document.getElementById("raffle-name").value.trim();
+    const email = document.getElementById("raffle-email").value.trim();
+    if (!name) {
+      document.getElementById("raffle-name").focus();
+      return;
+    }
+    const resp = await fetch("/submit_raffle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email }),
+    });
+    if (resp.ok) {
+      document.getElementById("raffle-form").querySelector("button").style.display = "none";
+      document.getElementById("raffle-thanks").style.display = "block";
+      document.getElementById("raffle-name").value  = "";
+      document.getElementById("raffle-email").value = "";
+    }
+  }
+
+  async function nextRound() {
+    cachedFrameB64 = null;
+    // Reset win sub-view for next player
+    document.getElementById("result-win").style.display  = "none";
+    document.getElementById("result-lose").style.display = "none";
+    document.getElementById("raffle-thanks").style.display = "none";
+    document.getElementById("btn-submit-raffle").style.display = "block";
+    await fetch("/next_round", { method: "POST" });
+  }
+
+  async function poll() {
+    try {
+      const resp  = await fetch("/state");
+      const state = await resp.json();
+      updateState(state);
+    } catch (e) {
+      console.warn("poll error:", e);
+    }
+    setTimeout(poll, 300);
+  }
+
+  showPhase("scanning");
+  poll();
+</script>
+</body>
+</html>

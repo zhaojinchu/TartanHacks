@@ -13,7 +13,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sanity-check YOLO labels.")
     parser.add_argument("--images_dir", required=True, type=Path)
     parser.add_argument("--labels_dir", required=True, type=Path)
-    parser.add_argument("--num_classes", type=int, default=8)
+    parser.add_argument("--num_classes", type=int, default=9)
     return parser.parse_args()
 
 

@@ -1,0 +1,1 @@
+A modular smart bin attachment that guides restaurant specific waste disposal using real time computer vision in <24 hours. Deployed a YOLOv8n model trained on 5,000+ hand labeled images on a Raspberry Pi 5 via ONNX, and integrated an ultrasonic fullness sensor plus a dashboard with capacity forecasting to help custodial staff prioritize pickups and optimize routes.
